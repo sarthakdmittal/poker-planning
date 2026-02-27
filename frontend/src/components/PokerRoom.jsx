@@ -125,6 +125,7 @@ export default function PokerRoom({ name }) {
   // Add state for editing description
   const [editingDescription, setEditingDescription] = useState(false);
   const [editDescriptionValue, setEditDescriptionValue] = useState("");
+  const [selectedCard, setSelectedCard] = useState(null);
 
   useEffect(() => {
     socket.on("users", setUsers);
@@ -178,11 +179,20 @@ export default function PokerRoom({ name }) {
   useEffect(() => {
     if (storyList.length > 0 && currentStoryIndex < storyList.length) {
       setJiraKey(storyList[currentStoryIndex]);
-      if (storyList[currentStoryIndex]) {
-        socket.emit("fetchJiraDetails", storyList[currentStoryIndex]);
-      }
     }
   }, [storyList, currentStoryIndex]);
+
+  // Fetch Jira details whenever jiraKey changes (for Next/Previous Story)
+  useEffect(() => {
+    if (jiraKey) {
+      socket.emit("fetchJiraDetails", jiraKey);
+    }
+  }, [jiraKey]);
+
+  // Reset selected card on reset or story change
+  useEffect(() => {
+    setSelectedCard(null);
+  }, [revealed, jiraKey]);
 
   return (
     <div>
@@ -221,6 +231,14 @@ export default function PokerRoom({ name }) {
             setStoryListInput("");
             setCurrentStoryIndex(0);
             setJiraKey("");
+            // Reset voting state when list is reset
+            setRevealed(false);
+            setResults(null);
+            setFinalPoint(null);
+            setIssueTitle(null);
+            setAcceptanceCriteria(null);
+            setDescription(null);
+            socket.emit("reset");
           }}>Reset List</button>
         </div>
       )}
@@ -326,7 +344,15 @@ export default function PokerRoom({ name }) {
           {/* Always show card selection and Reveal button, even if acceptanceCriteria is not loaded yet */}
           <h3>Select a card</h3>
           {cards.map((c) => (
-            <Card key={c} value={c} onClick={(v) => socket.emit("vote", v)} />
+            <Card
+              key={c}
+              value={c}
+              onClick={(v) => {
+                setSelectedCard(v);
+                socket.emit("vote", v);
+              }}
+              selected={selectedCard === c}
+            />
           ))}
           <br />
 
@@ -378,6 +404,7 @@ export default function PokerRoom({ name }) {
                     setIssueTitle(null);
                     setAcceptanceCriteria(null);
                     setDescription(null);
+                    socket.emit("reset"); // Emit reset so all clients reset UI
                   }
                 }}
                 disabled={storyList.length === 0 || currentStoryIndex === 0}
@@ -396,6 +423,7 @@ export default function PokerRoom({ name }) {
                     setIssueTitle(null);
                     setAcceptanceCriteria(null);
                     setDescription(null);
+                    socket.emit("reset"); // Emit reset so all clients reset UI
                   } else {
                     socket.emit("reset");
                   }
