@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { socket } from "../socket";
 import Card from "./Card.jsx";
+import { FaCheck } from "react-icons/fa";
 
 const cards = [0, 1, 2, 3, 5, 8, 13, 21];
 
@@ -194,6 +195,16 @@ export default function PokerRoom({ name }) {
     setSelectedCard(null);
   }, [revealed, jiraKey]);
 
+  // Listen for votes and update results state for tick display
+  useEffect(() => {
+    socket.on("voteUpdate", (data) => {
+      setResults(data);
+    });
+    return () => {
+      socket.off("voteUpdate");
+    };
+  }, []);
+
   return (
     <div>
       <h2>Planning Poker</h2>
@@ -201,7 +212,17 @@ export default function PokerRoom({ name }) {
       <h3>Participants</h3>
       <ul>
         {Object.values(users).map((u) => (
-          <li key={u}>{u}</li>
+          <li key={u} style={{display: 'flex', alignItems: 'center'}}>
+            {u}
+            {/* Show tick if this user has voted (selected a card) and admin is viewing */}
+            {isSarthak && !revealed && results && results.votes && Object.values(results.votes).includes(u) && (
+              <FaCheck style={{color: 'green', marginLeft: 6}} />
+            )}
+            {/* For all users, show tick if this user has voted (selected a card) and revealed is false */}
+            {!isSarthak && !revealed && results && results.votes && Object.values(results.votes).includes(u) && (
+              <FaCheck style={{color: 'green', marginLeft: 6}} />
+            )}
+          </li>
         ))}
       </ul>
 
