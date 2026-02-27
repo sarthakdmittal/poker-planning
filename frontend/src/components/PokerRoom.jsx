@@ -244,14 +244,12 @@ export default function PokerRoom({ name }) {
           }} disabled={!storyListInput.trim()}>Set Story List</button>
         </div>
       )}
-      {/* Show story number and Jira key to all users if storyList is set */}
+      {/* Always show story number and summary to all users if storyList is set and jiraKey is present */}
       {storyList.length > 0 && jiraKey && (
         <div style={{marginTop: 8, marginBottom: 4, fontWeight: 'bold'}}>
           Story {currentStoryIndex + 1} of {storyList.length}: <b>{jiraKey}</b>
         </div>
       )}
-
-      {/* Show summary as soon as jiraKey is entered and summary is available */}
       {jiraKey && issueTitle && (
         <div style={{marginTop: 4, marginBottom: 8, fontWeight: 'bold'}}>
           Summary: {issueTitle}
