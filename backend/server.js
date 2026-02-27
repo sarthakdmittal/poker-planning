@@ -37,9 +37,14 @@ io.on("connection", (socket) => {
   });
 
   socket.on("vote", (point) => {
-    room.votes[socket.id] = point;
+    if (point === null) {
+      delete room.votes[socket.id];   // 🔥 remove vote completely
+    } else {
+      room.votes[socket.id] = point;
+    }
+
     io.emit("votes", Object.keys(room.votes).length);
-    io.emit("voteUpdate", { votes: room.votes, users: room.users }); // Emit voteUpdate for tick
+    io.emit("voteUpdate", { votes: room.votes, users: room.users });
   });
 
   socket.on("reveal", () => {
