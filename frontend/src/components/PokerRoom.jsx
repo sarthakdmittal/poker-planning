@@ -26,7 +26,7 @@ function jiraWikiToHtml(text) {
     // Only bold *text* if not at start (avoid list marker)
     content = content.replace(/(^|\s)\*(\S(.*?\S)?)\*(?=\s|$)/g, '$1<b>$2</b>');
     // Italic _text_
-    content = content.replace/_(\S(.*?\S)?)_/g, '<i>$1</i>');
+    content = content.replace(/_(\S(.*?\S)?)_/g, '<i>$1</i>');
     // Monospace/code {{text}}
     content = content.replace(/\{\{(.*?)\}\}/g, '<code>$1</code>');
     // Links [text|url]
