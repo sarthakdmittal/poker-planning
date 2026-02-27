@@ -26,7 +26,7 @@ function jiraWikiToHtml(text) {
     // Only bold *text* if not at start (avoid list marker)
     content = content.replace(/(^|\s)\*(\S(.*?\S)?)\*(?=\s|$)/g, '$1<b>$2</b>');
     // Italic _text_
-    content = content.replace(/_(\S(.*?\S)?)_/g, '<i>$1</i>');
+    content = content.replace/_(\S(.*?\S)?)_/g, '<i>$1</i>');
     // Monospace/code {{text}}
     content = content.replace(/\{\{(.*?)\}\}/g, '<code>$1</code>');
     // Links [text|url]
@@ -213,11 +213,8 @@ export default function PokerRoom({ name }) {
         {Object.entries(users).map(([userId, userName]) => (
           <li key={userId} style={{display: 'flex', alignItems: 'center'}}>
             {userName}
-            {/* Show tick if this user has voted (selected a card) and voting is not revealed */}
-            {!revealed && (
-              (userId === socket.id && selectedCard !== null) ||
-              (results && results.votes && Object.keys(results.votes).includes(userId))
-            ) && (
+            {/* Show tick for any user who has voted (selected a card), visible to all participants */}
+            {!revealed && results && results.votes && Object.keys(results.votes).includes(userId) && (
               <FaCheck style={{color: 'green', marginLeft: 6}} />
             )}
           </li>
@@ -262,9 +259,16 @@ export default function PokerRoom({ name }) {
         </div>
       )}
 
+      {/* Show story number and Jira key to all users if storyList is set */}
+      {storyList.length > 0 && jiraKey && (
+        <div style={{marginTop: 8, marginBottom: 4, fontWeight: 'bold'}}>
+          Story {currentStoryIndex + 1} of {storyList.length}: <b>{jiraKey}</b>
+        </div>
+      )}
+
       {/* Show summary as soon as jiraKey is entered and summary is available */}
       {jiraKey && issueTitle && (
-        <div style={{marginTop: 8, marginBottom: 8, fontWeight: 'bold'}}>
+        <div style={{marginTop: 4, marginBottom: 8, fontWeight: 'bold'}}>
           Summary: {issueTitle}
         </div>
       )}
