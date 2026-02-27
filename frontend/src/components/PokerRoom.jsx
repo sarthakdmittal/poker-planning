@@ -156,8 +156,7 @@ export default function PokerRoom({ name }) {
       setRevealed(false);
       setResults(null);
       setFinalPoint(null);
-      setIssueTitle(null);
-      setAcceptanceCriteria(null);
+      // Do NOT clear issueTitle, acceptanceCriteria, or description here
     });
     socket.on("admin", setAdminName);
     // Clean up listeners on unmount
@@ -211,15 +210,14 @@ export default function PokerRoom({ name }) {
 
       <h3>Participants</h3>
       <ul>
-        {Object.values(users).map((u) => (
-          <li key={u} style={{display: 'flex', alignItems: 'center'}}>
-            {u}
-            {/* Show tick if this user has voted (selected a card) and admin is viewing */}
-            {isSarthak && !revealed && results && results.votes && Object.values(results.votes).includes(u) && (
-              <FaCheck style={{color: 'green', marginLeft: 6}} />
-            )}
-            {/* For all users, show tick if this user has voted (selected a card) and revealed is false */}
-            {!isSarthak && !revealed && results && results.votes && Object.values(results.votes).includes(u) && (
+        {Object.entries(users).map(([userId, userName]) => (
+          <li key={userId} style={{display: 'flex', alignItems: 'center'}}>
+            {userName}
+            {/* Show tick if this user has voted (selected a card) and voting is not revealed */}
+            {!revealed && (
+              (userId === socket.id && selectedCard !== null) ||
+              (results && results.votes && Object.keys(results.votes).includes(userId))
+            ) && (
               <FaCheck style={{color: 'green', marginLeft: 6}} />
             )}
           </li>
@@ -391,6 +389,22 @@ export default function PokerRoom({ name }) {
               <li key={id}>{results.users[id]}: {v}</li>
             ))}
           </ul>
+
+          {/* Reset Voting button for Sarthak (admin) only */}
+          {isSarthak && (
+            <button
+              style={{marginBottom: 12, marginTop: 8, background: '#ffe0e0', color: '#b71c1c', border: '1px solid #b71c1c'}}
+              onClick={() => {
+                setRevealed(false);
+                setResults(null);
+                setSelectedCard(null);
+                // Do NOT clear issueTitle, acceptanceCriteria, or description here
+                socket.emit("reset");
+              }}
+            >
+              Reset Voting
+            </button>
+          )}
 
           {isSarthak && (
             <>
