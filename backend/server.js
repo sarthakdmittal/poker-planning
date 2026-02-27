@@ -39,6 +39,7 @@ io.on("connection", (socket) => {
   socket.on("vote", (point) => {
     room.votes[socket.id] = point;
     io.emit("votes", Object.keys(room.votes).length);
+    io.emit("voteUpdate", { votes: room.votes, users: room.users }); // Emit voteUpdate for tick
   });
 
   socket.on("reveal", () => {

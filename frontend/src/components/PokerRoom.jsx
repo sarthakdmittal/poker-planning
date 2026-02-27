@@ -127,6 +127,7 @@ export default function PokerRoom({ name }) {
   const [editingDescription, setEditingDescription] = useState(false);
   const [editDescriptionValue, setEditDescriptionValue] = useState("");
   const [selectedCard, setSelectedCard] = useState(null);
+  const [votedUsers, setVotedUsers] = useState([]); // Track userIds who have voted
 
   useEffect(() => {
     socket.on("users", setUsers);
@@ -156,6 +157,7 @@ export default function PokerRoom({ name }) {
       setRevealed(false);
       setResults(null);
       setFinalPoint(null);
+      setVotedUsers([]); // Reset voted users on reset
       // Do NOT clear issueTitle, acceptanceCriteria, or description here
     });
     socket.on("admin", setAdminName);
@@ -194,9 +196,12 @@ export default function PokerRoom({ name }) {
     setSelectedCard(null);
   }, [revealed, jiraKey]);
 
-  // Listen for votes and update results state for tick display
+  // Listen for votes and update votedUsers state for tick display
   useEffect(() => {
     socket.on("voteUpdate", (data) => {
+      if (data && data.votes) {
+        setVotedUsers(Object.keys(data.votes));
+      }
       setResults(data);
     });
     return () => {
@@ -214,7 +219,7 @@ export default function PokerRoom({ name }) {
           <li key={userId} style={{display: 'flex', alignItems: 'center'}}>
             {userName}
             {/* Show tick for any user who has voted (selected a card), visible to all participants */}
-            {!revealed && results && results.votes && Object.keys(results.votes).includes(userId) && (
+            {!revealed && votedUsers.includes(userId) && (
               <FaCheck style={{color: 'green', marginLeft: 6}} />
             )}
           </li>
