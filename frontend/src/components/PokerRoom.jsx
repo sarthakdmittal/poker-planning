@@ -276,19 +276,27 @@ export default function PokerRoom({ name }) {
       )}
 
       {/* Show Acceptance Criteria controls, only if available */}
-      {acceptanceCriteria && (
+      {(acceptanceCriteria || description) && (
         <div style={{marginTop: 16, marginBottom: 16, background: '#f8f8f8', padding: 12, borderRadius: 6}}>
-          <button onClick={() => setShowAcceptance(v => !v)}>
-            {showAcceptance ? "Hide Acceptance Criteria" : "View Acceptance Criteria"}
-          </button>
-          <button style={{marginLeft:8}} onClick={() => setShowVisual(v => !v)}>
-            {showVisual ? "Text" : "Visual"}
-          </button>
+          {acceptanceCriteria && (
+            <button onClick={() => setShowAcceptance(v => !v)}>
+              {showAcceptance ? "Hide Acceptance Criteria" : "View Acceptance Criteria"}
+            </button>
+          )}
+
+          <br />
+          <br />
           {description && (
-            <button style={{marginLeft:8}} onClick={() => setShowDescription(v => !v)}>
+            <button onClick={() => setShowDescription(v => !v)}>
               {showDescription ? "Hide Description" : "View Description"}
             </button>
           )}
+
+      <br />
+      <br />
+      <button style={{marginTop:8}} onClick={() => setShowVisual(v => !v)}>
+                  {showVisual ? "Text" : "Visual"}
+                </button>
           {showAcceptance && (
             <div style={{marginTop: 8}}>
               <strong>Acceptance Criteria:</strong>
