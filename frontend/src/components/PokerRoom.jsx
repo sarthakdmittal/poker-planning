@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { socket } from "../socket";
 import Card from "./Card.jsx";
 import { FaCheck } from "react-icons/fa";
+import '../../jira-content.css';
 
 const cards = [0, 1, 2, 3, 5, 8, 13, 21];
 
@@ -9,74 +10,135 @@ const cards = [0, 1, 2, 3, 5, 8, 13, 21];
 function jiraWikiToHtml(text) {
   if (!text) return "";
 
-  // Convert h1. ... h6. to headings
-  text = text.replace(/^h([1-6])\.\s*(.*)$/gm, (m, l, t) => `<h${l}>${t.trim()}</h${l}>`);
-  // Convert +Heading+ to <h3>Heading</h3> (if on its own line)
-  text = text.replace(/^\+(.+?)\+$/gm, (m, t) => `<h3>${t.trim()}</h3>`);
-  // Convert +Heading+ (inline) to <b>Heading</b>
-  text = text.replace(/\+([^\n+]+)\+/g, (m, t) => `<b>${t.trim()}</b>`);
+  const lines = text.split("\n");
 
-  // Nested lists (bulleted only, with * for parent, ** for child, etc.)
-  const lines = text.split(/\r?\n/);
-  let html = '';
+  let html = "";
   let listStack = [];
-  function formatInline(content) {
-    // Bold { * } or *text* (only if not at start of line)
-    content = content.replace(/\{\*\}(.*?)\{\*\}/g, '<b>$1</b>');
-    // Only bold *text* if not at start (avoid list marker)
-    content = content.replace(/(^|\s)\*(\S(.*?\S)?)\*(?=\s|$)/g, '$1<b>$2</b>');
-    // Italic _text_
-    content = content.replace(/_(\S(.*?\S)?)_/g, '<i>$1</i>');
-    // Monospace/code {{text}}
-    content = content.replace(/\{\{(.*?)\}\}/g, '<code>$1</code>');
-    // Links [text|url]
-    content = content.replace(/\[(.+?)\|([^\]]+)]/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
-    return content;
+
+  function applyInlineFormatting(str) {
+
+    if (!str) return "";
+
+    // {*}text{*} -> bold
+    str = str.replace(/\{\*\}(.*?)\{\*\}/g, "<b>$1</b>");
+
+    // +text+
+    str = str.replace(/\+(.*?)\+/g, "<b>$1</b>");
+
+    // *text*
+    str = str.replace(/\*(.*?)\*/g, "<b>$1</b>");
+
+    // italic
+    str = str.replace(/_(.*?)_/g, "<i>$1</i>");
+
+    // inline code
+    str = str.replace(/\{\{(.*?)\}\}/g, "<code>$1</code>");
+
+    // {}text{}
+    str = str.replace(/\{\}(.*?)\{\}/g, "<code>$1</code>");
+
+    // color
+    str = str.replace(
+      /\{color:(#[0-9a-fA-F]{6})\}(.*?)\{color\}/g,
+      '<span style="color:$1">$2</span>'
+    );
+
+    // links
+    str = str.replace(
+      /\[(.+?)\|([^\]]+)]/g,
+      '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
+    );
+
+    return str;
   }
-  for (let i = 0; i < lines.length; i++) {
-    let line = lines[i];
-    // Match * ... (any number of * for nesting)
-    let match = line.match(/^(\*{1,})\s+(.*)$/);
-    if (match) {
-      const stars = match[1];
-      const content = match[2];
-      const indent = stars.length;
-      // Open new lists if needed
-      while (listStack.length < indent) {
-        html += '<ul>';
-        listStack.push('ul');
-      }
-      // Close lists if dedented
-      while (listStack.length > indent) {
-        html += `</ul>`;
-        listStack.pop();
-      }
-      // Parse inline formatting inside list item
-      let parsedContent = formatInline(content);
-      html += `<li>${parsedContent}</li>`;
-    } else {
-      // Close any open lists
+
+  for (let line of lines) {
+
+    line = line.trim();
+
+    // -----------------------
+    // Headings
+    // -----------------------
+
+    const headingMatch = line.match(/^h([1-6])\.\s+(.*)/);
+
+    if (headingMatch) {
+
       while (listStack.length) {
-        html += `</ul>`;
-        listStack.pop();
+        html += `</${listStack.pop()}>`;
       }
-      // Paragraphs and headings
-      if (line.trim() === '') {
-        html += '';
-      } else if (/^<h[1-6]>/.test(line) || /^<h3>/.test(line)) {
-        html += line;
-      } else {
-        html += `<p>${formatInline(line)}</p>`;
-      }
+
+      const level = headingMatch[1];
+      const content = applyInlineFormatting(headingMatch[2]);
+
+      html += `<h${level}>${content}</h${level}>`;
+      continue;
     }
+
+    // -----------------------
+    // Bullet lists
+    // -----------------------
+
+    const bulletMatch = line.match(/^(\*+)\s+(.*)/);
+
+    const numMatch = line.match(/^(#+)\s+(.*)/);
+
+    if (bulletMatch || numMatch) {
+
+      const chars = bulletMatch ? bulletMatch[1] : numMatch[1];
+      const rawContent = bulletMatch ? bulletMatch[2] : numMatch[2];
+
+    // Ignore empty bullets like "*"
+      if (!rawContent.trim()) {
+        continue;
+      }
+
+      const indent = chars.length;
+      const listType = bulletMatch ? "ul" : "ol";
+
+      while (listStack.length < indent) {
+        html += `<${listType}>`;
+        listStack.push(listType);
+      }
+
+      while (listStack.length > indent) {
+        html += `</${listStack.pop()}>`;
+      }
+
+      const content = applyInlineFormatting(rawContent);
+
+      html += `<li>${content}</li>`;
+      continue;
+    }
+
+    // -----------------------
+    // Code block
+    // -----------------------
+
+    const codeBlockMatch = line.match(/^\{code(:[^\}]*)?\}/);
+
+    if (codeBlockMatch) {
+      html += `<pre class="jira-code"><code>`;
+      continue;
+    }
+
+    // -----------------------
+    // Normal paragraph
+    // -----------------------
+
+    while (listStack.length) {
+      html += `</${listStack.pop()}>`;
+    }
+
+    if (!line) continue;
+
+    html += `<p>${applyInlineFormatting(line)}</p>`;
   }
-  // Close any remaining open lists
+
   while (listStack.length) {
-    html += `</ul>`;
-    listStack.pop();
+    html += `</${listStack.pop()}>`;
   }
-  // Remove empty <p></p>
-  html = html.replace(/<p>\s*<\/p>/g, '');
+
   return html;
 }
 
@@ -128,6 +190,7 @@ export default function PokerRoom({ name }) {
   const [editDescriptionValue, setEditDescriptionValue] = useState("");
   const [selectedCard, setSelectedCard] = useState(null);
   const [votedUsers, setVotedUsers] = useState([]); // Track userIds who have voted
+  const [issueType, setIssueType] = useState(null); // New state for issue type
 
   useEffect(() => {
     socket.on("users", setUsers);
@@ -151,6 +214,7 @@ export default function PokerRoom({ name }) {
       setIssueTitle(details.summary);
       setAcceptanceCriteria(details.acceptanceCriteria);
       setDescription(details.description);
+      setIssueType(details.issueType); // Set issue type from details
       setEditingAcceptance(false);
     });
     socket.on("reset", () => {
@@ -250,8 +314,15 @@ export default function PokerRoom({ name }) {
           Story {currentStoryIndex + 1} of {storyList.length}: <b>{jiraKey}</b>
         </div>
       )}
-      {jiraKey && issueTitle && (
-        <div style={{marginTop: 4, marginBottom: 8, fontWeight: 'bold'}}>
+      {/* Show issue type above summary */}
+      {issueType && (
+        <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
+          Issue Type: {issueType}
+        </div>
+      )}
+      {/* Show summary */}
+      {issueTitle && (
+        <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
           Summary: {issueTitle}
         </div>
       )}
@@ -303,7 +374,11 @@ export default function PokerRoom({ name }) {
               {!editingAcceptance ? (
                 <>
                   {showVisual ? (
-                    <div style={{marginTop: 6}} dangerouslySetInnerHTML={{__html: jiraWikiToHtml(acceptanceCriteria)}} />
+                    <div
+                      className="jira-content"
+                      style={{ maxWidth: "900px" }}
+                      dangerouslySetInnerHTML={{ __html: jiraWikiToHtml(acceptanceCriteria) }}
+                    />
                   ) : (
                     <div style={{marginTop: 6, whiteSpace: 'pre-line'}}>{jiraWikiToIndentedText(acceptanceCriteria)}</div>
                   )}
@@ -339,7 +414,10 @@ export default function PokerRoom({ name }) {
               {!editingDescription ? (
                 <>
                   {showVisual ? (
-                    <div style={{marginTop: 6}} dangerouslySetInnerHTML={{__html: jiraWikiToHtml(description)}} />
+                    <div
+                      className="jira-content"
+                      dangerouslySetInnerHTML={{ __html: jiraWikiToHtml(description) }}
+                    />
                   ) : (
                     <div style={{marginTop: 6, whiteSpace: 'pre-line'}}>{jiraWikiToIndentedText(description)}</div>
                   )}
@@ -518,7 +596,11 @@ export default function PokerRoom({ name }) {
                   {!editingAcceptance ? (
                     <>
                       {showVisual ? (
-                        <div style={{marginTop: 6}} dangerouslySetInnerHTML={{__html: jiraWikiToHtml(acceptanceCriteria)}} />
+                        <div
+                          className="jira-content"
+                          style={{ maxWidth: "900px" }}
+                          dangerouslySetInnerHTML={{ __html: jiraWikiToHtml(acceptanceCriteria) }}
+                        />
                       ) : (
                         <div style={{marginTop: 6, whiteSpace: 'pre-line'}}>{jiraWikiToIndentedText(acceptanceCriteria)}</div>
                       )}
