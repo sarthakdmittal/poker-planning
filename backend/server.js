@@ -120,6 +120,7 @@ io.on("connection", (socket) => {
         const details = await getJiraIssueDetails(jiraKey);
         io.emit("jiraDetails", details);
         console.log("Acceptance Criteria updated and broadcasted for issue:", jiraKey);
+        console.log(`SUCCESS: Acceptance Criteria updated for ${jiraKey}`);
       } catch (err) {
         console.error("Failed to update Jira Acceptance Criteria:", err.message);
       }
@@ -135,8 +136,25 @@ io.on("connection", (socket) => {
         const details = await getJiraIssueDetails(jiraKey);
         io.emit("jiraDetails", details);
         console.log("Description updated and broadcasted for issue:", jiraKey);
+        console.log(`SUCCESS: Description updated for ${jiraKey}`);
       } catch (err) {
         console.error("Failed to update Jira Description:", err.message);
+      }
+    }
+  });
+
+  socket.on("updateStoryPoints", async ({ jiraKey, storyPoints }) => {
+    console.log("Received updateStoryPoints event:", { jiraKey, storyPoints });
+    if (jiraKey && storyPoints != null) {
+      try {
+        await updateJiraStoryPoints(jiraKey, storyPoints);
+        // Fetch updated details and broadcast
+        const details = await getJiraIssueDetails(jiraKey);
+        io.emit("jiraDetails", details);
+        console.log("Story Points updated and broadcasted for issue:", jiraKey);
+        console.log(`SUCCESS: Story Points updated for ${jiraKey}`);
+      } catch (err) {
+        console.error("Failed to update Jira Story Points:", err.message);
       }
     }
   });
