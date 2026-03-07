@@ -496,6 +496,25 @@ export default function PokerRoom({ name }) {
             ))}
           </ul>
 
+          {/* Congratulation/party popper if all votes are identical */}
+          {(() => {
+            const voteValues = Object.values(results.votes);
+            if (voteValues.length > 1 && voteValues.every(v => v === voteValues[0])) {
+              return (
+                <div style={{ position: 'relative', margin: '24px 0', textAlign: 'center' }}>
+                  <div className="party-popper-animation">
+                    <span role="img" aria-label="party popper" style={{ fontSize: 48 }}>🎉</span>
+                    <span role="img" aria-label="party popper" style={{ fontSize: 48, marginLeft: 12 }}>🎉</span>
+                  </div>
+                  <div style={{ fontSize: 32, fontWeight: 'bold', color: '#2e7d32', marginTop: 12 }}>
+                    Congratulations! All participants voted the same!
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()}
+
           {/* Reset Voting button for Sarthak (admin) only */}
           {isSarthak && (
             <button
@@ -634,6 +653,22 @@ export default function PokerRoom({ name }) {
           )}
         </div>
       )}
+
+      {/* Add party popper animation CSS */}
+      <style>
+        {`
+        .party-popper-animation {
+          animation: popper-bounce 1s ease;
+          display: inline-block;
+        }
+        @keyframes popper-bounce {
+          0% { transform: scale(0.8) rotate(-10deg); opacity: 0.5; }
+          40% { transform: scale(1.2) rotate(10deg); opacity: 1; }
+          70% { transform: scale(1) rotate(-5deg); opacity: 1; }
+          100% { transform: scale(1) rotate(0deg); opacity: 1; }
+        }
+        `}
+      </style>
     </div>
   );
 }

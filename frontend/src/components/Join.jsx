@@ -1,4 +1,5 @@
 import { socket } from "../socket";
+import '../jira-content.css';
 
 export default function Join({ setName }) {
   const join = (e) => {
@@ -9,10 +10,12 @@ export default function Join({ setName }) {
   };
 
   return (
-    <form onSubmit={join}>
-      <h2>Join Planning Poker</h2>
-      <input name="name" placeholder="Your name" required />
-      <button>Join</button>
-    </form>
+    <div className="center-join-container">
+      <form onSubmit={join}>
+        <h2>Join Planning Poker</h2>
+        <input name="name" placeholder="Your name" required />
+        <button>Join</button>
+      </form>
+    </div>
   );
 }
