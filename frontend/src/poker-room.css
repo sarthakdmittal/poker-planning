@@ -1,0 +1,62 @@
+body {
+  background:#f4f6fb;
+}
+
+.poker-container{
+  max-width:1100px;
+  margin:auto;
+  padding:24px;
+}
+
+.section-card{
+  background:white;
+  padding:20px;
+  border-radius:10px;
+  margin-bottom:20px;
+  box-shadow:0 4px 12px rgba(0,0,0,0.08);
+}
+
+.participants{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+}
+
+.participant{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  background:#f3f5ff;
+  padding:6px 10px;
+  border-radius:20px;
+}
+
+.avatar{
+  width:28px;
+  height:28px;
+  background:#5b7cff;
+  color:white;
+  border-radius:50%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:bold;
+}
+
+.card-row{
+  display:flex;
+  justify-content:center;
+  gap:14px;
+  margin-top:20px;
+}
+
+.primary-btn{
+  background:#5b7cff;
+  border:none;
+  color:white;
+  padding:10px 16px;
+  border-radius:6px;
+  cursor:pointer;
+  margin-top:15px;
+}
+

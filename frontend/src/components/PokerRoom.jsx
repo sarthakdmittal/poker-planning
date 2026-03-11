@@ -1,94 +1,85 @@
 import { useEffect, useState } from "react";
 import { socket } from "../socket";
 import Card from "./Card.jsx";
-import { FaCheck } from "react-icons/fa";
+import {
+  FaCheck, FaUsers, FaEye, FaEyeSlash, FaArrowLeft, FaArrowRight,
+  FaUndo, FaStar, FaPencilAlt, FaCopy, FaRegCopy, FaUserSecret
+} from "react-icons/fa";
 import '../../jira-content.css';
+import './PokerRoom.css';
 
 const cards = [0, 1, 2, 3, 5, 8, 13, 21];
 
-// Jira wiki markup to HTML parser with robust nested list support and correct bold handling
+// Generate avatar color based on user name
+const getAvatarColor = (name) => {
+  const colors = [
+    '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEEAD',
+    '#D4A5A5', '#9B59B6', '#3498DB', '#E67E22', '#2ECC71',
+    '#E74C3C', '#1ABC9C', '#F1C40F', '#8E44AD', '#27AE60'
+  ];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
+};
+
+// Get initials from name
+const getInitials = (name) => {
+  return name
+    .split(' ')
+    .map(word => word[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+};
+
+// Jira wiki markup to HTML parser
 function jiraWikiToHtml(text) {
   if (!text) return "";
-
   const lines = text.split("\n");
-
   let html = "";
   let listStack = [];
 
   function applyInlineFormatting(str) {
-
     if (!str) return "";
-
-    // {*}text{*} -> bold
     str = str.replace(/\{\*\}(.*?)\{\*\}/g, "<b>$1</b>");
-
-    // +text+
     str = str.replace(/\+(.*?)\+/g, "<b>$1</b>");
-
-    // *text*
     str = str.replace(/\*(.*?)\*/g, "<b>$1</b>");
-
-    // italic
     str = str.replace(/_(.*?)_/g, "<i>$1</i>");
-
-    // inline code
     str = str.replace(/\{\{(.*?)\}\}/g, "<code>$1</code>");
-
-    // {}text{}
     str = str.replace(/\{\}(.*?)\{\}/g, "<code>$1</code>");
-
-    // color
     str = str.replace(
       /\{color:(#[0-9a-fA-F]{6})\}(.*?)\{color\}/g,
       '<span style="color:$1">$2</span>'
     );
-
-    // links
     str = str.replace(
       /\[(.+?)\|([^\]]+)]/g,
       '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
     );
-
     return str;
   }
 
   for (let line of lines) {
-
     line = line.trim();
-
-    // -----------------------
-    // Headings
-    // -----------------------
-
     const headingMatch = line.match(/^h([1-6])\.\s+(.*)/);
-
     if (headingMatch) {
-
       while (listStack.length) {
         html += `</${listStack.pop()}>`;
       }
-
       const level = headingMatch[1];
       const content = applyInlineFormatting(headingMatch[2]);
-
       html += `<h${level}>${content}</h${level}>`;
       continue;
     }
 
-    // -----------------------
-    // Bullet lists
-    // -----------------------
-
     const bulletMatch = line.match(/^(\*+)\s+(.*)/);
-
     const numMatch = line.match(/^(#+)\s+(.*)/);
 
     if (bulletMatch || numMatch) {
-
       const chars = bulletMatch ? bulletMatch[1] : numMatch[1];
       const rawContent = bulletMatch ? bulletMatch[2] : numMatch[2];
 
-    // Ignore empty bullets like "*"
       if (!rawContent.trim()) {
         continue;
       }
@@ -97,7 +88,7 @@ function jiraWikiToHtml(text) {
       const listType = bulletMatch ? "ul" : "ol";
 
       while (listStack.length < indent) {
-        html += `<${listType}>`;
+        html += `<${listType} class="jira-list">`;
         listStack.push(listType);
       }
 
@@ -106,32 +97,21 @@ function jiraWikiToHtml(text) {
       }
 
       const content = applyInlineFormatting(rawContent);
-
       html += `<li>${content}</li>`;
       continue;
     }
 
-    // -----------------------
-    // Code block
-    // -----------------------
-
     const codeBlockMatch = line.match(/^\{code(:[^\}]*)?\}/);
-
     if (codeBlockMatch) {
       html += `<pre class="jira-code"><code>`;
       continue;
     }
-
-    // -----------------------
-    // Normal paragraph
-    // -----------------------
 
     while (listStack.length) {
       html += `</${listStack.pop()}>`;
     }
 
     if (!line) continue;
-
     html += `<p>${applyInlineFormatting(line)}</p>`;
   }
 
@@ -142,29 +122,123 @@ function jiraWikiToHtml(text) {
   return html;
 }
 
-// Jira wiki markup to indented plain text (for Text mode)
+// Jira wiki markup to indented plain text
 function jiraWikiToIndentedText(text) {
   if (!text) return "";
   const lines = text.split(/\r?\n/);
   let result = [];
-  let lastIndent = 0;
   lines.forEach(line => {
     const match = line.match(/^(\*+)(\s+)(.*)$/);
     if (match) {
       const stars = match[1].length;
       const content = match[3];
-      // Remove leading * from content if present (e.g. '*Mandatory' -> 'Mandatory')
       let cleanContent = content.replace(/^(\*+)(\s*)/, '');
-      result.push(`${'\t'.repeat(stars - 1)}${cleanContent}`);
-      lastIndent = stars - 1;
+      result.push(`${'  '.repeat(stars - 1)}• ${cleanContent}`);
     } else {
-      // If the line is not a list, keep as is
       result.push(line);
-      lastIndent = 0;
     }
   });
   return result.join("\n");
 }
+
+// HTML to Jira wiki markup converter (simplified)
+function htmlToJiraWiki(html) {
+  if (!html) return "";
+
+  // Create a temporary div to parse HTML
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = html;
+
+  // Function to process nodes recursively
+  function processNode(node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      return node.textContent;
+    }
+
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      const tagName = node.tagName.toLowerCase();
+      const children = Array.from(node.childNodes).map(child => processNode(child)).join('');
+
+      switch (tagName) {
+        case 'b':
+        case 'strong':
+          return `*${children}*`;
+        case 'i':
+        case 'em':
+          return `_${children}_`;
+        case 'u':
+          return `+${children}+`;
+        case 'code':
+          return `{{${children}}}`;
+        case 'a':
+          const href = node.getAttribute('href') || '';
+          return `[${children}|${href}]`;
+        case 'h1':
+          return `h1. ${children}\n`;
+        case 'h2':
+          return `h2. ${children}\n`;
+        case 'h3':
+          return `h3. ${children}\n`;
+        case 'h4':
+          return `h4. ${children}\n`;
+        case 'h5':
+          return `h5. ${children}\n`;
+        case 'h6':
+          return `h6. ${children}\n`;
+        case 'p':
+          return `${children}\n`;
+        case 'div':
+          return `${children}\n`;
+        case 'ul':
+          return children;
+        case 'ol':
+          return children;
+        case 'li':
+          // Determine if it's in a ul or ol
+          const parent = node.parentNode;
+          if (parent && parent.tagName.toLowerCase() === 'ul') {
+            return `* ${children}\n`;
+          } else if (parent && parent.tagName.toLowerCase() === 'ol') {
+            return `# ${children}\n`;
+          }
+          return `* ${children}\n`;
+        case 'span':
+          const style = node.getAttribute('style') || '';
+          const colorMatch = style.match(/color:\s*(#[0-9a-fA-F]{6})/);
+          if (colorMatch) {
+            return `{color:${colorMatch[1]}}${children}{color}`;
+          }
+          return children;
+        case 'br':
+          return '\n';
+        default:
+          return children;
+      }
+    }
+
+    return '';
+  }
+
+  return processNode(tempDiv).replace(/\n{3,}/g, '\n\n');
+}
+
+// Calculate statistics from votes
+const calculateStats = (votes) => {
+  const values = Object.values(votes).filter(v => v !== null && v !== undefined);
+  if (values.length === 0) return null;
+
+  const sum = values.reduce((a, b) => a + b, 0);
+  const avg = sum / values.length;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+
+  return {
+    avg: avg.toFixed(1),
+    min,
+    max,
+    count: values.length
+  };
+};
 
 export default function PokerRoom({ name }) {
   const [users, setUsers] = useState({});
@@ -180,25 +254,56 @@ export default function PokerRoom({ name }) {
   const [showAcceptance, setShowAcceptance] = useState(false);
   const [editingAcceptance, setEditingAcceptance] = useState(false);
   const [editAcceptanceValue, setEditAcceptanceValue] = useState("");
+  const [editingAcceptanceVisual, setEditingAcceptanceVisual] = useState(false);
+  const [editAcceptanceVisualValue, setEditAcceptanceVisualValue] = useState("");
   const [showVisual, setShowVisual] = useState(false);
   const [showDescription, setShowDescription] = useState(false);
-  const [storyList, setStoryList] = useState([]); // List of Jira keys
+  const [storyList, setStoryList] = useState([]);
   const [currentStoryIndex, setCurrentStoryIndex] = useState(0);
-  const [storyListInput, setStoryListInput] = useState(""); // For Sarthak to input
-  // Add state for editing description
+  const [storyListInput, setStoryListInput] = useState("");
   const [editingDescription, setEditingDescription] = useState(false);
   const [editDescriptionValue, setEditDescriptionValue] = useState("");
+  const [editingDescriptionVisual, setEditingDescriptionVisual] = useState(false);
+  const [editDescriptionVisualValue, setEditDescriptionVisualValue] = useState("");
   const [selectedCard, setSelectedCard] = useState(null);
-  const [votedUsers, setVotedUsers] = useState([]); // Track userIds who have voted
-  const [issueType, setIssueType] = useState(null); // New state for issue type
+  const [votedUsers, setVotedUsers] = useState([]);
+  const [issueType, setIssueType] = useState(null);
+  const [copied, setCopied] = useState(false);
+
+  // Observer mode states
+  const [observers, setObservers] = useState({});
+  const [observingTarget, setObservingTarget] = useState(null);
+  const [userVotes, setUserVotes] = useState({});
+
+  // Request initial observers when component mounts
+  useEffect(() => {
+    // Request current observer state when joining
+    socket.emit("requestObservers");
+
+    // Also request periodically to stay in sync (every 5 seconds)
+    const interval = setInterval(() => {
+      socket.emit("requestObservers");
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
-    socket.on("users", setUsers);
+    console.log("Setting up socket listeners for:", name);
+
+    socket.on("users", (data) => {
+      console.log("Users updated:", data);
+      setUsers(data);
+    });
+
     socket.on("reveal", (data) => {
+      console.log("Reveal received:", data);
       setResults(data);
       setRevealed(true);
     });
+
     socket.on("final", (data) => {
+      console.log("Final received:", data);
       if (typeof data === "object" && data !== null) {
         setFinalPoint(data.point);
         setIssueTitle(data.issueTitle);
@@ -209,466 +314,1042 @@ export default function PokerRoom({ name }) {
         setAcceptanceCriteria(null);
       }
     });
+
     socket.on("jiraDetails", (details) => {
-      console.log("Received jiraDetails:", details); // DEBUG LOG
+      console.log("Received jiraDetails:", details);
       setIssueTitle(details.summary);
       setAcceptanceCriteria(details.acceptanceCriteria);
       setDescription(details.description);
-      setIssueType(details.issueType); // Set issue type from details
+      setIssueType(details.issueType);
       setEditingAcceptance(false);
+      setEditingAcceptanceVisual(false);
+      setEditingDescription(false);
+      setEditingDescriptionVisual(false);
     });
+
     socket.on("reset", () => {
+      console.log("Reset received");
       setRevealed(false);
       setResults(null);
       setFinalPoint(null);
-      setVotedUsers([]); // Reset voted users on reset
-      // Do NOT clear issueTitle, acceptanceCriteria, or description here
+      setVotedUsers([]);
+      setSelectedCard(null);
+      setObservers({});
+      setObservingTarget(null);
     });
-    socket.on("admin", setAdminName);
-    // Clean up listeners on unmount
+
+    socket.on("admin", (data) => {
+      console.log("Admin set:", data);
+      setAdminName(data);
+    });
+
+    socket.on("voteUpdate", (data) => {
+      console.log("Vote update received:", data);
+      if (data && data.votes) {
+        setVotedUsers(Object.keys(data.votes));
+        setUserVotes(data.votes);
+      }
+      setResults(data);
+    });
+
+    socket.on("observersUpdate", (observerData) => {
+      console.log("Received observers update:", observerData);
+      console.log("Current user:", name);
+      console.log("Current user ID:", Object.keys(users).find(uid => users[uid] === name));
+      console.log("New observer state for current user:",
+        Object.keys(users).find(uid => users[uid] === name) ?
+        observerData[Object.keys(users).find(uid => users[uid] === name)] : 'unknown');
+
+      setObservers(observerData);
+
+      // If current user becomes an observer, clear their selected card
+      const currentUserId = Object.keys(users).find(uid => users[uid] === name);
+      if (currentUserId && observerData[currentUserId]) {
+        console.log("Current user is now an observer, clearing vote");
+        setSelectedCard(null);
+        // Also clear any existing vote by emitting null
+        socket.emit("vote", null);
+      }
+    });
+
     return () => {
-      socket.off("users", setUsers);
+      console.log("Cleaning up socket listeners");
+      socket.off("users");
       socket.off("reveal");
       socket.off("final");
       socket.off("jiraDetails");
       socket.off("reset");
-      socket.off("admin", setAdminName);
+      socket.off("admin");
+      socket.off("voteUpdate");
+      socket.off("observersUpdate");
     };
-  }, []);
+  }, [name, users]);
 
   const isAdmin = name && adminName && name === adminName;
-
-  // Only Sarthak can finalize and go to next story
   const isSarthak = name === "Sarthak";
 
-  // When Sarthak sets a new story list, set jiraKey to the first one
+  // Get current user's ID
+  const currentUserId = Object.keys(users).find(uid => users[uid] === name);
+  const isCurrentUserObserver = currentUserId ? observers[currentUserId] : false;
+
+  // Log observer status for debugging
+  useEffect(() => {
+    console.log("Current user state:", {
+      name,
+      currentUserId,
+      isCurrentUserObserver,
+      observers,
+      users
+    });
+  }, [name, currentUserId, isCurrentUserObserver, observers, users]);
+
   useEffect(() => {
     if (storyList.length > 0 && currentStoryIndex < storyList.length) {
       setJiraKey(storyList[currentStoryIndex]);
     }
   }, [storyList, currentStoryIndex]);
 
-  // Fetch Jira details whenever jiraKey changes (for Next/Previous Story)
   useEffect(() => {
     if (jiraKey) {
       socket.emit("fetchJiraDetails", jiraKey);
     }
   }, [jiraKey]);
 
-  // Reset selected card on reset or story change
   useEffect(() => {
     setSelectedCard(null);
+    setObservingTarget(null);
   }, [revealed, jiraKey]);
 
-  // Listen for votes and update votedUsers state for tick display
-  useEffect(() => {
-    socket.on("voteUpdate", (data) => {
-      if (data && data.votes) {
-        setVotedUsers(Object.keys(data.votes));
-      }
-      setResults(data);
+  const handleVote = (value) => {
+    console.log("handleVote called with value:", value);
+    console.log("Current state:", {
+      isCurrentUserObserver,
+      currentUserId,
+      selectedCard,
+      votedUsers
     });
-    return () => {
-      socket.off("voteUpdate");
-    };
-  }, []);
+
+    // Observers cannot vote
+    if (isCurrentUserObserver) {
+      console.log("Observer cannot vote");
+      alert("You are in observer mode and cannot vote");
+      return;
+    }
+
+    if (!currentUserId) {
+      console.log("No current user ID found");
+      return;
+    }
+
+    if (selectedCard === value) {
+      console.log("Deselecting card:", value);
+      setSelectedCard(null);
+      setVotedUsers(prev => prev.filter(uid => uid !== currentUserId));
+      socket.emit("vote", null);
+    } else {
+      console.log("Selecting card:", value);
+      setSelectedCard(value);
+      if (!votedUsers.includes(currentUserId)) {
+        setVotedUsers(prev => [...prev, currentUserId]);
+      }
+      socket.emit("vote", value);
+    }
+  };
+
+  const toggleObserver = (userId) => {
+    if (!isSarthak) {
+      console.log("Only Sarthak can toggle observers");
+      return;
+    }
+
+    console.log("Toggling observer for user:", userId);
+    console.log("Current observer state:", observers[userId]);
+
+    // Optimistically update local state for immediate UI feedback
+    const newObserverState = !observers[userId];
+
+    setObservers(prev => {
+      const newState = {
+        ...prev,
+        [userId]: newObserverState
+      };
+      console.log("Optimistically updated observers state:", newState);
+      return newState;
+    });
+
+    // If toggling current user and they become observer, clear their vote
+    if (userId === currentUserId && newObserverState) {
+      console.log("Clearing vote for current user who became observer");
+      setSelectedCard(null);
+      socket.emit("vote", null);
+    }
+
+    // Emit socket event to server
+    socket.emit("toggleObserver", userId);
+
+    // Force a request for updated observers after a short delay
+    setTimeout(() => {
+      socket.emit("requestObservers");
+    }, 500);
+  };
+
+  const observeUser = (userId) => {
+    if (!isCurrentUserObserver) {
+      console.log("Only observers can observe others");
+      return;
+    }
+
+    if (observingTarget === userId) {
+      console.log("Stopping observation of:", users[userId]);
+      setObservingTarget(null);
+    } else {
+      console.log("Starting observation of:", users[userId]);
+      setObservingTarget(userId);
+    }
+  };
+
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const allVotesSame = results &&
+    Object.values(results.votes).length > 1 &&
+    Object.values(results.votes).every(v => v === Object.values(results.votes)[0]);
+
+  const observedVote = observingTarget && userVotes ? userVotes[observingTarget] : null;
+
+  // Calculate stats when results are revealed
+  const stats = results && revealed ? calculateStats(results.votes) : null;
+
+  // Force a request for current observers
+  const requestObservers = () => {
+    console.log("Manually requesting observers");
+    socket.emit("requestObservers");
+  };
+
+  // Apply basic formatting in visual editor
+  const applyFormatting = (command, value = null) => {
+    document.execCommand(command, false, value);
+    // Update the state with the new content
+    const editor = document.querySelector('.visual-editor.active');
+    if (editor) {
+      if (editingAcceptanceVisual) {
+        setEditAcceptanceVisualValue(editor.innerHTML);
+      } else if (editingDescriptionVisual) {
+        setEditDescriptionVisualValue(editor.innerHTML);
+      }
+    }
+  };
 
   return (
-    <div>
-      <h2>Planning Poker</h2>
+    <div className="poker-room">
+      <div className="poker-container">
+        {/* Header */}
+        <div className="room-header">
+          <h1 className="room-title">Planning Poker</h1>
+          {isCurrentUserObserver && (
+            <div className="observer-badge">
+              <FaUserSecret className="observer-badge-icon" />
+              <span>Observer Mode</span>
+            </div>
+          )}
+          {jiraKey && (
+            <div className="story-badge" onClick={() => copyToClipboard(jiraKey)} title="Click to copy">
+              <span className="story-key">{jiraKey}</span>
+              {copied ? <FaCopy className="copy-icon copied" /> : <FaRegCopy className="copy-icon" />}
+            </div>
+          )}
+        </div>
 
-      <h3>Participants</h3>
-      <ul>
-        {Object.entries(users).map(([userId, userName]) => (
-          <li key={userId} style={{display: 'flex', alignItems: 'center'}}>
-            {userName}
-            {/* Show tick for any user who has voted (selected a card), visible to all participants */}
-            {!revealed && votedUsers.includes(userId) && (
-              <FaCheck style={{color: 'green', marginLeft: 6}} />
+        {/* Observing Target Indicator */}
+        {observingTarget && (
+          <div className="observing-indicator">
+            <FaEye className="observing-icon" />
+            <span>
+              Observing <strong>{users[observingTarget]}</strong>'s view
+              {!revealed && observedVote && (
+                <span className="observed-vote"> (Voted: {observedVote})</span>
+              )}
+            </span>
+            <button
+              className="stop-observing-btn"
+              onClick={() => setObservingTarget(null)}
+            >
+              Stop Observing
+            </button>
+          </div>
+        )}
+
+        {/* Participants Section */}
+        <div className="participants-section">
+          <div className="section-header">
+            <FaUsers className="section-icon" />
+            <h3>Participants ({Object.keys(users).length})</h3>
+            {isSarthak && (
+              <span className="observer-hint">(Click 👁️ to toggle observer mode)</span>
             )}
-          </li>
-        ))}
-      </ul>
+          </div>
+          <div className="participants-grid">
+            {Object.entries(users).map(([userId, userName]) => {
+              const hasVoted = !revealed && votedUsers.includes(userId);
+              const backgroundColor = getAvatarColor(userName);
+              const isObserver = observers[userId];
+              const isCurrentUser = userName === name;
+              const isObserving = observingTarget === userId;
 
-      {isSarthak && storyList.length === 0 && (
-        <div style={{marginBottom: 16}}>
-          <h4>Enter list of Jira Issue Keys (one per line):</h4>
-          <textarea
-            rows={5}
-            style={{width: 300, fontFamily: 'inherit'}}
-            value={storyListInput}
-            onChange={e => setStoryListInput(e.target.value)}
-            placeholder={"E.g.\nPROJ-123\nPROJ-124\nPROJ-125"}
-          />
-          <br />
-          <button onClick={() => {
-            const list = storyListInput.split(/\r?\n|,|\s+/).map(s => s.trim()).filter(Boolean);
-            setStoryList(list);
-            setCurrentStoryIndex(0);
-          }} disabled={!storyListInput.trim()}>Set Story List</button>
-        </div>
-      )}
-      {/* Always show story number and summary to all users if storyList is set and jiraKey is present */}
-      {storyList.length > 0 && jiraKey && (
-        <div style={{marginTop: 8, marginBottom: 4, fontWeight: 'bold'}}>
-          Story {currentStoryIndex + 1} of {storyList.length}: <b>{jiraKey}</b>
-        </div>
-      )}
-      {/* Show issue type above summary */}
-      {issueType && (
-        <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
-          Issue Type: {issueType}
-        </div>
-      )}
-      {/* Show summary */}
-      {issueTitle && (
-        <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
-          Summary: {issueTitle}
-        </div>
-      )}
-
-      {isSarthak && storyList.length > 0 && (
-        <div style={{marginBottom: 8}}>
-          <button style={{marginLeft:8}} onClick={() => {
-            setStoryList([]);
-            setStoryListInput("");
-            setCurrentStoryIndex(0);
-            setJiraKey("");
-            // Reset voting state when list is reset
-            setRevealed(false);
-            setResults(null);
-            setFinalPoint(null);
-            setIssueTitle(null);
-            setAcceptanceCriteria(null);
-            setDescription(null);
-            socket.emit("reset");
-          }}>Reset List</button>
-        </div>
-      )}
-
-      {/* Show Acceptance Criteria controls, only if available */}
-      {(acceptanceCriteria || description) && (
-        <div style={{marginTop: 16, marginBottom: 16, background: '#f8f8f8', padding: 12, borderRadius: 6}}>
-          {acceptanceCriteria && (
-            <button onClick={() => setShowAcceptance(v => !v)}>
-              {showAcceptance ? "Hide Acceptance Criteria" : "View Acceptance Criteria"}
-            </button>
-          )}
-
-          <br />
-          <br />
-          {description && (
-            <button onClick={() => setShowDescription(v => !v)}>
-              {showDescription ? "Hide Description" : "View Description"}
-            </button>
-          )}
-
-      <br />
-      <br />
-      <button style={{marginTop:8}} onClick={() => setShowVisual(v => !v)}>
-                  {showVisual ? "Text" : "Visual"}
-                </button>
-          {showAcceptance && (
-            <div style={{marginTop: 8}}>
-              <strong>Acceptance Criteria:</strong>
-              {!editingAcceptance ? (
-                <>
-                  {showVisual ? (
-                    <div
-                      className="jira-content"
-                      style={{ maxWidth: "900px" }}
-                      dangerouslySetInnerHTML={{ __html: jiraWikiToHtml(acceptanceCriteria) }}
-                    />
-                  ) : (
-                    <div style={{marginTop: 6, whiteSpace: 'pre-line'}}>{jiraWikiToIndentedText(acceptanceCriteria)}</div>
-                  )}
-                  {isSarthak && (
-                    <button style={{marginTop:8}} onClick={() => {
-                      setEditingAcceptance(true);
-                      setEditAcceptanceValue(acceptanceCriteria);
-                    }}>Edit</button>
-                  )}
-                </>
-              ) : (
-                <div style={{marginTop: 6}}>
-                  <textarea
-                    value={editAcceptanceValue}
-                    onChange={e => setEditAcceptanceValue(e.target.value)}
-                    rows={8}
-                    style={{width: '100%', fontFamily: 'inherit'}}
-                  />
-                  <div style={{marginTop:8}}>
-                    <button onClick={() => {
-                      socket.emit("updateAcceptanceCriteria", { jiraKey, acceptanceCriteria: editAcceptanceValue });
-                      setEditingAcceptance(false);
-                    }}>Save</button>
-                    <button style={{marginLeft:8}} onClick={() => setEditingAcceptance(false)}>Cancel</button>
+              return (
+                <div
+                  key={userId}
+                  className={`participant-card
+                    ${hasVoted ? 'voted' : ''}
+                    ${isObserver ? 'observer' : ''}
+                    ${isObserving ? 'observing' : ''}
+                    ${isCurrentUser ? 'current-user' : ''}
+                  `}
+                >
+                  <div className="participant-avatar" style={{ backgroundColor }}>
+                    {getInitials(userName)}
+                    {isObserver && <FaUserSecret className="observer-icon" />}
                   </div>
+                  <span className="participant-name">{userName}</span>
+
+                  {isSarthak && (
+                    <button
+                      className={`observer-toggle-btn ${isObserver ? 'active' : ''}`}
+                      onClick={() => toggleObserver(userId)}
+                      title={isObserver ? "Remove observer rights" : "Make observer"}
+                    >
+                      <FaEye />
+                    </button>
+                  )}
+
+                  {isCurrentUserObserver && !isCurrentUser && (
+                    <button
+                      className={`observe-btn ${isObserving ? 'active' : ''}`}
+                      onClick={() => observeUser(userId)}
+                      title={`Observe ${userName}'s view`}
+                    >
+                      <FaEye />
+                    </button>
+                  )}
+
+                  {hasVoted && !isObserver && <FaCheck className="vote-check" />}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Story Card */}
+        {(issueTitle || acceptanceCriteria || description) && (
+          <div className="story-card">
+            <div className="story-card-header">
+              <span className="story-type">{issueType || 'Story'}</span>
+              {storyList.length > 0 && (
+                <div className="story-progress-container">
+                  <button
+                    className="progress-nav-btn"
+                    onClick={() => {
+                      if (currentStoryIndex > 0) {
+                        setCurrentStoryIndex(currentStoryIndex - 1);
+                        setRevealed(false);
+                        setResults(null);
+                        setFinalPoint(null);
+                        setIssueTitle(null);
+                        setAcceptanceCriteria(null);
+                        setDescription(null);
+                        setObservingTarget(null);
+                        setEditingAcceptance(false);
+                        setEditingAcceptanceVisual(false);
+                        setEditingDescription(false);
+                        setEditingDescriptionVisual(false);
+                        socket.emit("reset");
+                      }
+                    }}
+                    disabled={currentStoryIndex === 0}
+                    title="Previous Story"
+                  >
+                    <FaArrowLeft />
+                  </button>
+                  <span className="story-progress">
+                    {currentStoryIndex + 1} / {storyList.length}
+                  </span>
+                  <button
+                    className="progress-nav-btn"
+                    onClick={() => {
+                      if (currentStoryIndex < storyList.length - 1) {
+                        setCurrentStoryIndex(currentStoryIndex + 1);
+                        setRevealed(false);
+                        setResults(null);
+                        setFinalPoint(null);
+                        setIssueTitle(null);
+                        setAcceptanceCriteria(null);
+                        setDescription(null);
+                        setObservingTarget(null);
+                        setEditingAcceptance(false);
+                        setEditingAcceptanceVisual(false);
+                        setEditingDescription(false);
+                        setEditingDescriptionVisual(false);
+                        socket.emit("reset");
+                      }
+                    }}
+                    disabled={currentStoryIndex >= storyList.length - 1}
+                    title="Next Story"
+                  >
+                    <FaArrowRight />
+                  </button>
                 </div>
               )}
             </div>
-          )}
-          {showDescription && description && (
-            <div style={{marginTop: 16}}>
-              <strong>Description:</strong>
-              {!editingDescription ? (
-                <>
-                  {showVisual ? (
+            <h2 className="story-title">{issueTitle || 'Loading story...'}</h2>
+
+            <div className="story-actions">
+              {acceptanceCriteria && (
+                <button
+                  className={`story-action-btn ${showAcceptance ? 'active' : ''}`}
+                  onClick={() => setShowAcceptance(!showAcceptance)}
+                >
+                  {showAcceptance ? <FaEyeSlash /> : <FaEye />}
+                  Acceptance Criteria
+                </button>
+              )}
+              {description && (
+                <button
+                  className={`story-action-btn ${showDescription ? 'active' : ''}`}
+                  onClick={() => setShowDescription(!showDescription)}
+                >
+                  {showDescription ? <FaEyeSlash /> : <FaEye />}
+                  Description
+                </button>
+              )}
+              {(acceptanceCriteria || description) && (
+                <button
+                  className="story-action-btn"
+                  onClick={() => setShowVisual(!showVisual)}
+                >
+                  {showVisual ? 'Text View' : 'Visual View'}
+                </button>
+              )}
+            </div>
+
+            {showAcceptance && acceptanceCriteria && (
+              <div className="story-content">
+                <div className="content-header">
+                  <strong>Acceptance Criteria</strong>
+                  {isSarthak && !editingAcceptance && !editingAcceptanceVisual && !isCurrentUserObserver && (
+                    <div className="edit-buttons">
+                      <button
+                        className="edit-btn"
+                        onClick={() => {
+                          setEditingAcceptance(true);
+                          setEditAcceptanceValue(acceptanceCriteria);
+                        }}
+                        title="Edit in text mode"
+                      >
+                        <FaPencilAlt /> Text
+                      </button>
+                      <button
+                        className="edit-btn visual-edit-btn"
+                        onClick={() => {
+                          setEditingAcceptanceVisual(true);
+                          // If in visual mode, use the current visual content, otherwise convert from wiki
+                          setEditAcceptanceVisualValue(
+                            showVisual ?
+                            acceptanceCriteria :
+                            jiraWikiToHtml(acceptanceCriteria)
+                          );
+                        }}
+                        title="Edit in visual mode"
+                      >
+                        <FaPencilAlt /> Visual
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {!editingAcceptance && !editingAcceptanceVisual ? (
+                  showVisual ? (
+                    <div
+                      className="jira-content"
+                      dangerouslySetInnerHTML={{ __html: jiraWikiToHtml(acceptanceCriteria) }}
+                    />
+                  ) : (
+                    <pre className="text-content">{jiraWikiToIndentedText(acceptanceCriteria)}</pre>
+                  )
+                ) : editingAcceptance ? (
+                  <div className="edit-mode">
+                    <textarea
+                      value={editAcceptanceValue}
+                      onChange={e => setEditAcceptanceValue(e.target.value)}
+                      rows={6}
+                    />
+                    <div className="edit-actions">
+                      <button className="btn-save" onClick={() => {
+                        socket.emit("updateAcceptanceCriteria", {
+                          jiraKey,
+                          acceptanceCriteria: editAcceptanceValue
+                        });
+                        setEditingAcceptance(false);
+                      }}>Save</button>
+                      <button className="btn-cancel" onClick={() => setEditingAcceptance(false)}>Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="edit-mode visual-edit-mode">
+                    <div className="visual-edit-toolbar">
+                      <button
+                        className="toolbar-btn"
+                        onClick={() => applyFormatting('bold')}
+                        title="Bold"
+                        type="button"
+                      >
+                        <b>B</b>
+                      </button>
+                      <button
+                        className="toolbar-btn"
+                        onClick={() => applyFormatting('italic')}
+                        title="Italic"
+                        type="button"
+                      >
+                        <i>I</i>
+                      </button>
+                      <button
+                        className="toolbar-btn"
+                        onClick={() => applyFormatting('underline')}
+                        title="Underline"
+                        type="button"
+                      >
+                        <u>U</u>
+                      </button>
+                      <button
+                        className="toolbar-btn"
+                        onClick={() => applyFormatting('insertUnorderedList')}
+                        title="Bullet List"
+                        type="button"
+                      >
+                        • List
+                      </button>
+                      <button
+                        className="toolbar-btn"
+                        onClick={() => applyFormatting('insertOrderedList')}
+                        title="Numbered List"
+                        type="button"
+                      >
+                        1. List
+                      </button>
+                      <button
+                        className="toolbar-btn"
+                        onClick={() => applyFormatting('formatBlock', 'h3')}
+                        title="Heading"
+                        type="button"
+                      >
+                        H
+                      </button>
+                      <span className="toolbar-hint">(Visual editor - basic formatting supported)</span>
+                    </div>
+                    <div
+                      className="visual-editor active"
+                      contentEditable={true}
+                      dangerouslySetInnerHTML={{ __html: editAcceptanceVisualValue }}
+                      onInput={(e) => setEditAcceptanceVisualValue(e.currentTarget.innerHTML)}
+                      onBlur={(e) => setEditAcceptanceVisualValue(e.currentTarget.innerHTML)}
+                      style={{
+                        border: '1px solid #ddd',
+                        padding: '12px',
+                        minHeight: '200px',
+                        borderRadius: '4px',
+                        backgroundColor: 'white',
+                        outline: 'none',
+                        overflowY: 'auto'
+                      }}
+                      suppressContentEditableWarning={true}
+                    />
+                    <div className="edit-actions">
+                      <button className="btn-save" onClick={() => {
+                        // Convert HTML back to Jira wiki format before saving
+                        const wikiContent = htmlToJiraWiki(editAcceptanceVisualValue);
+                        socket.emit("updateAcceptanceCriteria", {
+                          jiraKey,
+                          acceptanceCriteria: wikiContent
+                        });
+                        setEditingAcceptanceVisual(false);
+                      }}>Save</button>
+                      <button className="btn-cancel" onClick={() => setEditingAcceptanceVisual(false)}>Cancel</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {showDescription && description && (
+              <div className="story-content">
+                <div className="content-header">
+                  <strong>Description</strong>
+                  {isSarthak && !editingDescription && !editingDescriptionVisual && !isCurrentUserObserver && (
+                    <div className="edit-buttons">
+                      <button
+                        className="edit-btn"
+                        onClick={() => {
+                          setEditingDescription(true);
+                          setEditDescriptionValue(description);
+                        }}
+                        title="Edit in text mode"
+                      >
+                        <FaPencilAlt /> Text
+                      </button>
+                      <button
+                        className="edit-btn visual-edit-btn"
+                        onClick={() => {
+                          setEditingDescriptionVisual(true);
+                          // If in visual mode, use the current visual content, otherwise convert from wiki
+                          setEditDescriptionVisualValue(
+                            showVisual ?
+                            description :
+                            jiraWikiToHtml(description)
+                          );
+                        }}
+                        title="Edit in visual mode"
+                      >
+                        <FaPencilAlt /> Visual
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {!editingDescription && !editingDescriptionVisual ? (
+                  showVisual ? (
                     <div
                       className="jira-content"
                       dangerouslySetInnerHTML={{ __html: jiraWikiToHtml(description) }}
                     />
                   ) : (
-                    <div style={{marginTop: 6, whiteSpace: 'pre-line'}}>{jiraWikiToIndentedText(description)}</div>
-                  )}
-                  {isSarthak && (
-                    <button style={{marginTop:8}} onClick={() => {
-                      setEditingDescription(true);
-                      setEditDescriptionValue(description);
-                    }}>Edit</button>
-                  )}
-                </>
-              ) : (
-                <div style={{marginTop: 6}}>
-                  <textarea
-                    value={editDescriptionValue}
-                    onChange={e => setEditDescriptionValue(e.target.value)}
-                    rows={8}
-                    style={{width: '100%', fontFamily: 'inherit'}}
-                  />
-                  <div style={{marginTop:8}}>
-                    <button onClick={() => {
-                      socket.emit("updateDescription", { jiraKey, description: editDescriptionValue });
-                      setEditingDescription(false);
-                    }}>Save</button>
-                    <button style={{marginLeft:8}} onClick={() => setEditingDescription(false)}>Cancel</button>
+                    <pre className="text-content">{jiraWikiToIndentedText(description)}</pre>
+                  )
+                ) : editingDescription ? (
+                  <div className="edit-mode">
+                    <textarea
+                      value={editDescriptionValue}
+                      onChange={e => setEditDescriptionValue(e.target.value)}
+                      rows={6}
+                    />
+                    <div className="edit-actions">
+                      <button className="btn-save" onClick={() => {
+                        socket.emit("updateDescription", {
+                          jiraKey,
+                          description: editDescriptionValue
+                        });
+                        setEditingDescription(false);
+                      }}>Save</button>
+                      <button className="btn-cancel" onClick={() => setEditingDescription(false)}>Cancel</button>
+                    </div>
                   </div>
+                ) : (
+                  <div className="edit-mode visual-edit-mode">
+                    <div className="visual-edit-toolbar">
+                      <button
+                        className="toolbar-btn"
+                        onClick={() => applyFormatting('bold')}
+                        title="Bold"
+                        type="button"
+                      >
+                        <b>B</b>
+                      </button>
+                      <button
+                        className="toolbar-btn"
+                        onClick={() => applyFormatting('italic')}
+                        title="Italic"
+                        type="button"
+                      >
+                        <i>I</i>
+                      </button>
+                      <button
+                        className="toolbar-btn"
+                        onClick={() => applyFormatting('underline')}
+                        title="Underline"
+                        type="button"
+                      >
+                        <u>U</u>
+                      </button>
+                      <button
+                        className="toolbar-btn"
+                        onClick={() => applyFormatting('insertUnorderedList')}
+                        title="Bullet List"
+                        type="button"
+                      >
+                        • List
+                      </button>
+                      <button
+                        className="toolbar-btn"
+                        onClick={() => applyFormatting('insertOrderedList')}
+                        title="Numbered List"
+                        type="button"
+                      >
+                        1. List
+                      </button>
+                      <button
+                        className="toolbar-btn"
+                        onClick={() => applyFormatting('formatBlock', 'h3')}
+                        title="Heading"
+                        type="button"
+                      >
+                        H
+                      </button>
+                      <span className="toolbar-hint">(Visual editor - basic formatting supported)</span>
+                    </div>
+                    <div
+                      className="visual-editor active"
+                      contentEditable={true}
+                      dangerouslySetInnerHTML={{ __html: editDescriptionVisualValue }}
+                      onInput={(e) => setEditDescriptionVisualValue(e.currentTarget.innerHTML)}
+                      onBlur={(e) => setEditDescriptionVisualValue(e.currentTarget.innerHTML)}
+                      style={{
+                        border: '1px solid #ddd',
+                        padding: '12px',
+                        minHeight: '200px',
+                        borderRadius: '4px',
+                        backgroundColor: 'white',
+                        outline: 'none',
+                        overflowY: 'auto'
+                      }}
+                      suppressContentEditableWarning={true}
+                    />
+                    <div className="edit-actions">
+                      <button className="btn-save" onClick={() => {
+                        // Convert HTML back to Jira wiki format before saving
+                        const wikiContent = htmlToJiraWiki(editDescriptionVisualValue);
+                        socket.emit("updateDescription", {
+                          jiraKey,
+                          description: wikiContent
+                        });
+                        setEditingDescriptionVisual(false);
+                      }}>Save</button>
+                      <button className="btn-cancel" onClick={() => setEditingDescriptionVisual(false)}>Cancel</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Story List Input (Sarthak only) */}
+        {!isCurrentUserObserver && isSarthak && storyList.length === 0 && (
+          <div className="story-list-input">
+            <h4>Enter Jira Issues</h4>
+            <p className="input-hint">One issue key per line (e.g., PROJ-123)</p>
+            <textarea
+              rows={4}
+              value={storyListInput}
+              onChange={e => setStoryListInput(e.target.value)}
+              placeholder="PROJ-123&#10;PROJ-124&#10;PROJ-125"
+            />
+            <button
+              className="btn-primary"
+              onClick={() => {
+                const list = storyListInput.split(/\r?\n|,|\s+/).map(s => s.trim()).filter(Boolean);
+                setStoryList(list);
+                setCurrentStoryIndex(0);
+              }}
+              disabled={!storyListInput.trim()}
+            >
+              Start Planning
+            </button>
+          </div>
+        )}
+
+        {/* Card Selection Area */}
+        {!revealed && (
+          <div className="voting-section">
+            <h3>Select your estimate</h3>
+
+            {/* Always show cards for non-observers */}
+            {!isCurrentUserObserver && (
+              <div className="cards-grid">
+                {cards.map((c) => (
+                  <Card
+                    key={c}
+                    value={c}
+                    onClick={(value) => {
+                      console.log("Card onClick triggered with value:", value);
+                      handleVote(value);
+                    }}
+                    selected={selectedCard === c}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Observer message */}
+            {isCurrentUserObserver && (
+              <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+                <p>You are in observer mode and cannot vote</p>
+              </div>
+            )}
+
+            {/* Reveal button - ALWAYS show for Sarthak, regardless of observer mode */}
+            {isSarthak && (
+              <button
+                className="btn-reveal"
+                onClick={() => {
+                  console.log("Reveal button clicked");
+                  socket.emit("reveal");
+                }}
+              >
+                <FaEye /> Reveal Votes
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Observer View */}
+        {isCurrentUserObserver && observingTarget && !revealed && (
+          <div className="observer-view">
+            <div className="observer-view-header">
+              <h3>Viewing {users[observingTarget]}'s screen</h3>
+              {observedVote ? (
+                <div className="observed-card">
+                  <span>Selected card: </span>
+                  <strong>{observedVote}</strong>
                 </div>
+              ) : (
+                <p className="no-vote-message">Has not voted yet</p>
               )}
             </div>
-          )}
-        </div>
-      )}
+          </div>
+        )}
 
-      {/* Only show card selection and Reveal button if not revealed */}
-      {!revealed && (
-        <>
-          <h3>Select a card</h3>
-          {cards.map((c) => (
-            <Card
-              key={c}
-              value={c}
-              onClick={(v) => {
-                if (selectedCard === v) {
-                  setSelectedCard(null);
-                  // Remove current user's userId from votedUsers for immediate tick update
-                  const myId = Object.keys(users).find(uid => users[uid] === name);
-                  if (myId) {
-                    setVotedUsers(prev => prev.filter(uid => uid !== myId));
-                  }
-                  socket.emit("vote", null);
-                } else {
-                  setSelectedCard(v);
-                  // Optimistically add current user to votedUsers
-                  const myId = Object.keys(users).find(uid => users[uid] === name);
-                  if (myId && !votedUsers.includes(myId)) {
-                    setVotedUsers(prev => [...prev, myId]);
-                  }
-                  socket.emit("vote", v);
-                }
-              }}
-              selected={selectedCard === c}
-            />
-          ))}
-          <br />
-          {isSarthak && (
-            <button onClick={() => socket.emit("reveal")}>Reveal</button>
-          )}
-        </>
-      )}
+        {/* Observer placeholder */}
+        {isCurrentUserObserver && !observingTarget && !revealed && (
+          <div className="observer-placeholder">
+            <FaUserSecret className="placeholder-icon" />
+            <h3>You are in Observer Mode</h3>
+            <p>Click the <FaEye /> icon on any participant to view their screen</p>
+          </div>
+        )}
 
-      {revealed && results && (
-        <>
-          <h3>Votes</h3>
-          <ul>
-            {Object.entries(results.votes).map(([id, v]) => (
-              <li key={id}>{results.users[id]}: {v}</li>
-            ))}
-          </ul>
+        {/* Results Section */}
+        {revealed && results && (
+          <div className="results-section">
+            <h3>Voting Results</h3>
 
-          {/* Congratulation/party popper if all votes are identical */}
-          {(() => {
-            const voteValues = Object.values(results.votes);
-            if (voteValues.length > 1 && voteValues.every(v => v === voteValues[0])) {
-              return (
-                <div style={{ position: 'relative', margin: '24px 0', textAlign: 'center' }}>
-                  <div className="party-popper-animation">
-                    <span role="img" aria-label="party popper" style={{ fontSize: 48 }}>🎉</span>
-                    <span role="img" aria-label="party popper" style={{ fontSize: 48, marginLeft: 12 }}>🎉</span>
+            {stats && (
+              <div className="stats-wrapper">
+                <div className="stats-header">
+                  <span className="stats-title">📊 Vote Analysis</span>
+                  {allVotesSame && (
+                    <span className="consensus-badge">
+                      <span className="consensus-icon">🎯</span>
+                      Consensus Reached!
+                    </span>
+                  )}
+                </div>
+                <div className="stats-grid">
+                  <div className="stat-card average">
+                    <div className="stat-icon">📈</div>
+                    <div className="stat-content">
+                      <span className="stat-label">Average</span>
+                      <span className="stat-value">{stats.avg}</span>
+                    </div>
+                    <div className="stat-trend">
+                      {stats.avg > 0 && <span className="trend-indicator">↗️</span>}
+                    </div>
                   </div>
-                  <div style={{ fontSize: 32, fontWeight: 'bold', color: '#2e7d32', marginTop: 12 }}>
-                    Congratulations! All participants voted the same!
+
+                  <div className="stat-card minimum">
+                    <div className="stat-icon">⬇️</div>
+                    <div className="stat-content">
+                      <span className="stat-label">Minimum</span>
+                      <span className="stat-value">{stats.min}</span>
+                    </div>
+                  </div>
+
+                  <div className="stat-card maximum">
+                    <div className="stat-icon">⬆️</div>
+                    <div className="stat-content">
+                      <span className="stat-label">Maximum</span>
+                      <span className="stat-value">{stats.max}</span>
+                    </div>
+                  </div>
+
+                  <div className="stat-card count">
+                    <div className="stat-icon">👥</div>
+                    <div className="stat-content">
+                      <span className="stat-label">Total Votes</span>
+                      <span className="stat-value">{stats.count}</span>
+                    </div>
+                    <div className="stat-subtitle">
+                      {stats.count === 1 ? 'participant' : 'participants'}
+                    </div>
                   </div>
                 </div>
-              );
-            }
-            return null;
-          })()}
 
-          {/* Reset Voting button for Sarthak (admin) only */}
-          {isSarthak && (
-            <button
-              style={{marginBottom: 12, marginTop: 8, background: '#ffe0e0', color: '#b71c1c', border: '1px solid #b71c1c'}}
-              onClick={() => {
-                setRevealed(false);
-                setResults(null);
-                setSelectedCard(null);
-                // Do NOT clear issueTitle, acceptanceCriteria, or description here
-                socket.emit("reset");
-              }}
-            >
-              Reset Voting
-            </button>
-          )}
-
-          {isSarthak && (
-            <>
-              {/* Only show Jira key input if not using storyList, or allow override */}
-              {storyList.length === 0 && (
-                <input
-                  type="text"
-                  placeholder="Jira Issue Key (e.g. PROJ-123)"
-                  value={jiraKey}
-                  onChange={e => setJiraKey(e.target.value)}
-                  style={{ width: 180, marginRight: 8 }}
-                />
-              )}
-              <input
-                type="number"
-                value={customPoint}
-                onChange={e => setCustomPoint(Number(e.target.value))}
-                style={{ width: 60, marginRight: 8 }}
-                min={0}
-              />
-              <button onClick={() => socket.emit("finalize", { point: customPoint, jiraKey })}>
-                Finalize {customPoint}
-              </button>
-              <button
-                onClick={() => {
-                  // Previous Story: decrement index and auto-fetch previous Jira key
-                  if (storyList.length > 0 && currentStoryIndex > 0) {
-                    setCurrentStoryIndex(currentStoryIndex - 1);
-                    setRevealed(false); // Reset voting state for previous story
-                    setResults(null);
-                    setFinalPoint(null);
-                    setIssueTitle(null);
-                    setAcceptanceCriteria(null);
-                    setDescription(null);
-                    socket.emit("reset"); // Emit reset so all clients reset UI
-                  }
-                }}
-                disabled={storyList.length === 0 || currentStoryIndex === 0}
-                style={{marginRight: 8}}
-              >
-                Previous Story
-              </button>
-              <button
-                onClick={() => {
-                  // Next Story: increment index and auto-fetch next Jira key
-                  if (storyList.length > 0 && currentStoryIndex < storyList.length - 1) {
-                    setCurrentStoryIndex(currentStoryIndex + 1);
-                    setRevealed(false); // Reset voting state for new story
-                    setResults(null);
-                    setFinalPoint(null);
-                    setIssueTitle(null);
-                    setAcceptanceCriteria(null);
-                    setDescription(null);
-                    socket.emit("reset"); // Emit reset so all clients reset UI
-                  } else {
-                    socket.emit("reset");
-                  }
-                }}
-                disabled={storyList.length > 0 && currentStoryIndex >= storyList.length - 1}
-              >
-                Next Story
-              </button>
-            </>
-          )}
-        </>
-      )}
-
-      {finalPoint && (
-        <div>
-          <h2>Final Story Point: {finalPoint}</h2>
-          {issueTitle && <h3>Issue Title: {issueTitle}</h3>}
-          {acceptanceCriteria && (
-            <div style={{marginTop: 16, marginBottom: 16, background: '#f8f8f8', padding: 12, borderRadius: 6}}>
-              <button onClick={() => setShowAcceptance(v => !v)}>
-                {showAcceptance ? "Hide Acceptance Criteria" : "View Acceptance Criteria"}
-              </button>
-              <button style={{marginLeft:8}} onClick={() => setShowVisual(v => !v)}>
-                {showVisual ? "Text" : "Visual"}
-              </button>
-              {showAcceptance && (
-                <div style={{marginTop: 8}}>
-                  <strong>Acceptance Criteria:</strong>
-                  {!editingAcceptance ? (
-                    <>
-                      {showVisual ? (
-                        <div
-                          className="jira-content"
-                          style={{ maxWidth: "900px" }}
-                          dangerouslySetInnerHTML={{ __html: jiraWikiToHtml(acceptanceCriteria) }}
-                        />
-                      ) : (
-                        <div style={{marginTop: 6, whiteSpace: 'pre-line'}}>{jiraWikiToIndentedText(acceptanceCriteria)}</div>
-                      )}
-                      {isSarthak && (
-                        <button style={{marginTop:8}} onClick={() => {
-                          setEditingAcceptance(true);
-                          setEditAcceptanceValue(acceptanceCriteria);
-                        }}>Edit</button>
-                      )}
-                    </>
-                  ) : (
-                    <div style={{marginTop: 6}}>
-                      <textarea
-                        value={editAcceptanceValue}
-                        onChange={e => setEditAcceptanceValue(e.target.value)}
-                        rows={8}
-                        style={{width: '100%', fontFamily: 'inherit'}}
-                      />
-                      <div style={{marginTop:8}}>
-                        <button onClick={() => {
-                          socket.emit("updateAcceptanceCriteria", { jiraKey, acceptanceCriteria: editAcceptanceValue });
-                          setEditingAcceptance(false);
-                        }}>Save</button>
-                        <button style={{marginLeft:8}} onClick={() => setEditingAcceptance(false)}>Cancel</button>
+                {/* Range Visualization */}
+                {stats.min !== stats.max && (
+                  <div className="vote-range">
+                    <div className="range-label">Vote Range</div>
+                    <div className="range-bar-container">
+                      <div
+                        className="range-bar"
+                        style={{
+                          left: `${(stats.min / stats.max) * 100}%`,
+                          width: `${((stats.max - stats.min) / stats.max) * 100}%`
+                        }}
+                      ></div>
+                      <div className="range-markers">
+                        <span className="range-min">{stats.min}</span>
+                        <span className="range-max">{stats.max}</span>
                       </div>
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+                  </div>
+                )}
+              </div>
+            )}
 
-      {/* Add party popper animation CSS */}
-      <style>
-        {`
-        .party-popper-animation {
-          animation: popper-bounce 1s ease;
-          display: inline-block;
-        }
-        @keyframes popper-bounce {
-          0% { transform: scale(0.8) rotate(-10deg); opacity: 0.5; }
-          40% { transform: scale(1.2) rotate(10deg); opacity: 1; }
-          70% { transform: scale(1) rotate(-5deg); opacity: 1; }
-          100% { transform: scale(1) rotate(0deg); opacity: 1; }
-        }
-        `}
-      </style>
+            {allVotesSame && (
+              <div className="celebration">
+                <div className="party-poppers">
+                  <span>🎉</span>
+                  <span>🎊</span>
+                  <span>🎉</span>
+                  <span>✨</span>
+                  <span>🎉</span>
+                </div>
+                <p className="celebration-text">
+                  <span className="celebration-emoji">🏆</span>
+                  Perfect Agreement!
+                  <span className="celebration-emoji">🏆</span>
+                </p>
+                <div className="confetti-dots">
+                  <span>⚡</span>
+                  <span>⭐</span>
+                  <span>⚡</span>
+                </div>
+              </div>
+            )}
+
+            <div className="votes-grid">
+              {Object.entries(results.votes).map(([id, vote]) => {
+                const isObservedUser = observingTarget === id;
+                return (
+                  <div
+                    key={id}
+                    className={`vote-item ${isObservedUser ? 'observed-vote-item' : ''}`}
+                  >
+                    <div className="voter-info">
+                      <div className="voter-avatar" style={{ backgroundColor: getAvatarColor(results.users[id]) }}>
+                        {getInitials(results.users[id])}
+                        {observers[id] && <FaUserSecret className="voter-observer-icon" />}
+                      </div>
+                      <span className="voter-name">{results.users[id]}</span>
+                    </div>
+                    <span className="vote-value">{vote}</span>
+                    {isObservedUser && <FaEye className="observed-eye" />}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Quick Stats Summary */}
+            {stats && (
+              <div className="stats-footer">
+                <div className="stats-summary">
+                  <span className="summary-item">
+                    <span className="summary-dot" style={{ background: '#4CAF50' }}></span>
+                    Spread: {stats.max - stats.min} points
+                  </span>
+                  <span className="summary-item">
+                    <span className="summary-dot" style={{ background: '#FF9800' }}></span>
+                    Median: {stats.min === stats.max ? stats.min : Math.round((stats.min + stats.max) / 2)}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Admin Controls */}
+            {isSarthak && (
+              <div className="admin-controls">
+                <button
+                  className="btn-reset"
+                  onClick={() => {
+                    setRevealed(false);
+                    setResults(null);
+                    setSelectedCard(null);
+                    socket.emit("reset");
+                  }}
+                >
+                  <FaUndo /> Reset Voting
+                </button>
+
+                <div className="finalize-controls">
+                  {storyList.length === 0 && (
+                    <input
+                      type="text"
+                      placeholder="Jira Key"
+                      value={jiraKey}
+                      onChange={e => setJiraKey(e.target.value)}
+                      className="jira-input"
+                    />
+                  )}
+                  <div className="point-input-group">
+                    <input
+                      type="number"
+                      value={customPoint}
+                      onChange={e => setCustomPoint(Number(e.target.value))}
+                      min={0}
+                      className="point-input"
+                    />
+                    <button
+                      className="btn-finalize"
+                      onClick={() => socket.emit("finalize", { point: customPoint, jiraKey })}
+                    >
+                      <FaStar /> Finalize {customPoint}
+                    </button>
+                  </div>
+                </div>
+
+                {storyList.length > 0 && (
+                  <button
+                    className="btn-reset-list"
+                    onClick={() => {
+                      setStoryList([]);
+                      setStoryListInput("");
+                      setCurrentStoryIndex(0);
+                      setJiraKey("");
+                      setRevealed(false);
+                      setResults(null);
+                      setFinalPoint(null);
+                      setIssueTitle(null);
+                      setAcceptanceCriteria(null);
+                      setDescription(null);
+                      setObservingTarget(null);
+                      setEditingAcceptance(false);
+                      setEditingAcceptanceVisual(false);
+                      setEditingDescription(false);
+                      setEditingDescriptionVisual(false);
+                      socket.emit("reset");
+                    }}
+                  >
+                    Reset List
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Final Point Display */}
+        {finalPoint && (
+          <div className="final-point-card">
+            <div className="final-point-content">
+              <span className="final-point-label">Final Story Point</span>
+              <span className="final-point-value">{finalPoint}</span>
+            </div>
+            {issueTitle && <p className="final-story-title">{issueTitle}</p>}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

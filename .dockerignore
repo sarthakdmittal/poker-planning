@@ -1,0 +1,10 @@
+# Poker Planning Root .dockerignore
+node_modules
+*.log
+*.tmp
+*.env
+backend/node_modules
+frontend/node_modules
+backend/dist
+frontend/dist
+

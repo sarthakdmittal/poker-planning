@@ -1,0 +1,13 @@
+# Frontend Dockerfile (multi-stage)
+CMD ["nginx", "-g", "daemon off;"]
+EXPOSE 3000
+COPY --from=builder /app/dist /usr/share/nginx/html
+FROM nginx:1.25-alpine
+
+RUN npm run build
+COPY frontend/ ./
+RUN npm install --production
+COPY frontend/package.json frontend/package-lock.json ./
+WORKDIR /app
+FROM node:18-alpine AS builder
+
