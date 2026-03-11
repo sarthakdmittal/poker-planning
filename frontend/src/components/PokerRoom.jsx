@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { socket } from "../socket";
 import Card from "./Card.jsx";
 import {
   FaCheck, FaUsers, FaEye, FaEyeSlash, FaArrowLeft, FaArrowRight,
-  FaUndo, FaStar, FaPencilAlt, FaCopy, FaRegCopy, FaUserSecret
+  FaUndo, FaStar, FaPencilAlt, FaCopy, FaRegCopy, FaUserSecret,
+  FaBold, FaItalic, FaUnderline, FaListUl, FaListOl, FaHeading,
+  FaMarkdown, FaCode
 } from "react-icons/fa";
 import '../../jira-content.css';
 import './PokerRoom.css';
@@ -34,34 +36,121 @@ const getInitials = (name) => {
     .slice(0, 2);
 };
 
+// Helper functions for cursor position
+const saveCursorPosition = (el) => {
+  const selection = window.getSelection();
+  if (selection.rangeCount > 0) {
+    const range = selection.getRangeAt(0);
+    const preSelectionRange = range.cloneRange();
+    preSelectionRange.selectNodeContents(el);
+    preSelectionRange.setEnd(range.startContainer, range.startOffset);
+    const start = preSelectionRange.toString().length;
+    return {
+      start,
+      end: start + range.toString().length
+    };
+  }
+  return null;
+};
+
+const restoreCursorPosition = (el, savedPosition) => {
+  if (!savedPosition) return;
+
+  const selection = window.getSelection();
+  const range = document.createRange();
+
+  let charIndex = 0;
+  const nodeStack = [el];
+  let node, foundStart = false, stop = false;
+
+  while (!stop && (node = nodeStack.pop())) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const nextCharIndex = charIndex + node.length;
+      if (!foundStart && savedPosition.start >= charIndex && savedPosition.start <= nextCharIndex) {
+        range.setStart(node, savedPosition.start - charIndex);
+        foundStart = true;
+      }
+      if (foundStart && savedPosition.end >= charIndex && savedPosition.end <= nextCharIndex) {
+        range.setEnd(node, savedPosition.end - charIndex);
+        stop = true;
+      }
+      charIndex = nextCharIndex;
+    } else {
+      const childNodes = node.childNodes;
+      for (let i = childNodes.length - 1; i >= 0; i--) {
+        nodeStack.push(childNodes[i]);
+      }
+    }
+  }
+
+  selection.removeAllRanges();
+  selection.addRange(range);
+};
+
 // Jira wiki markup to HTML parser
 function jiraWikiToHtml(text) {
   if (!text) return "";
-  const lines = text.split("\n");
+
+  // First, normalize line endings and trim
+  const lines = text.split(/\r?\n/);
   let html = "";
   let listStack = [];
+  let inCodeBlock = false;
 
   function applyInlineFormatting(str) {
     if (!str) return "";
-    str = str.replace(/\{\*\}(.*?)\{\*\}/g, "<b>$1</b>");
-    str = str.replace(/\+(.*?)\+/g, "<b>$1</b>");
-    str = str.replace(/\*(.*?)\*/g, "<b>$1</b>");
-    str = str.replace(/_(.*?)_/g, "<i>$1</i>");
+
+    // Handle {*}bold{*} syntax (this is the one causing your issue)
+    str = str.replace(/\{\*\}(.*?)\{\*\}/g, "<strong>$1</strong>");
+
+    // Handle *bold* syntax
+    str = str.replace(/\*([^*]+)\*/g, "<strong>$1</strong>");
+
+    // Handle +bold+ syntax
+    str = str.replace(/\+(.*?)\+/g, "<strong>$1</strong>");
+
+    // Handle italic
+    str = str.replace(/_([^_]+)_/g, "<em>$1</em>");
+
+    // Handle code
     str = str.replace(/\{\{(.*?)\}\}/g, "<code>$1</code>");
     str = str.replace(/\{\}(.*?)\{\}/g, "<code>$1</code>");
+
+    // Handle color
     str = str.replace(
-      /\{color:(#[0-9a-fA-F]{6})\}(.*?)\{color\}/g,
+      /\{color:([#\w]+)\}(.*?)\{color\}/g,
       '<span style="color:$1">$2</span>'
     );
+
+    // Handle links
     str = str.replace(
-      /\[(.+?)\|([^\]]+)]/g,
+      /\[([^\|]+)\|([^\]]+)\]/g,
       '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
     );
+
     return str;
   }
 
   for (let line of lines) {
     line = line.trim();
+
+    // Handle code blocks
+    if (line.startsWith("{code}")) {
+      inCodeBlock = true;
+      html += '<pre class="jira-code"><code>';
+      continue;
+    }
+    if (line.startsWith("{code}") && inCodeBlock) {
+      inCodeBlock = false;
+      html += '</code></pre>';
+      continue;
+    }
+    if (inCodeBlock) {
+      html += line + '\n';
+      continue;
+    }
+
+    // Handle headings
     const headingMatch = line.match(/^h([1-6])\.\s+(.*)/);
     if (headingMatch) {
       while (listStack.length) {
@@ -69,52 +158,62 @@ function jiraWikiToHtml(text) {
       }
       const level = headingMatch[1];
       const content = applyInlineFormatting(headingMatch[2]);
-      html += `<h${level}>${content}</h${level}>`;
+      html += `<h${level} class="jira-heading">${content}</h${level}>`;
       continue;
     }
 
+    // Handle bullet lists
     const bulletMatch = line.match(/^(\*+)\s+(.*)/);
-    const numMatch = line.match(/^(#+)\s+(.*)/);
+    if (bulletMatch) {
+      const level = bulletMatch[1].length;
+      const content = applyInlineFormatting(bulletMatch[2]);
 
-    if (bulletMatch || numMatch) {
-      const chars = bulletMatch ? bulletMatch[1] : numMatch[1];
-      const rawContent = bulletMatch ? bulletMatch[2] : numMatch[2];
-
-      if (!rawContent.trim()) {
-        continue;
+      while (listStack.length < level) {
+        html += '<ul class="jira-list">';
+        listStack.push('ul');
       }
-
-      const indent = chars.length;
-      const listType = bulletMatch ? "ul" : "ol";
-
-      while (listStack.length < indent) {
-        html += `<${listType} class="jira-list">`;
-        listStack.push(listType);
-      }
-
-      while (listStack.length > indent) {
+      while (listStack.length > level) {
         html += `</${listStack.pop()}>`;
       }
 
-      const content = applyInlineFormatting(rawContent);
       html += `<li>${content}</li>`;
       continue;
     }
 
-    const codeBlockMatch = line.match(/^\{code(:[^\}]*)?\}/);
-    if (codeBlockMatch) {
-      html += `<pre class="jira-code"><code>`;
+    // Handle numbered lists
+    const numMatch = line.match(/^(#+)\s+(.*)/);
+    if (numMatch) {
+      const level = numMatch[1].length;
+      const content = applyInlineFormatting(numMatch[2]);
+
+      while (listStack.length < level) {
+        html += '<ol class="jira-list">';
+        listStack.push('ol');
+      }
+      while (listStack.length > level) {
+        html += `</${listStack.pop()}>`;
+      }
+
+      html += `<li>${content}</li>`;
       continue;
     }
 
+    // Close any open lists for non-list items
     while (listStack.length) {
       html += `</${listStack.pop()}>`;
     }
 
-    if (!line) continue;
+    // Handle empty lines as paragraph breaks
+    if (line === '') {
+      html += '<br/>';
+      continue;
+    }
+
+    // Regular paragraph
     html += `<p>${applyInlineFormatting(line)}</p>`;
   }
 
+  // Close any remaining lists
   while (listStack.length) {
     html += `</${listStack.pop()}>`;
   }
@@ -122,26 +221,7 @@ function jiraWikiToHtml(text) {
   return html;
 }
 
-// Jira wiki markup to indented plain text
-function jiraWikiToIndentedText(text) {
-  if (!text) return "";
-  const lines = text.split(/\r?\n/);
-  let result = [];
-  lines.forEach(line => {
-    const match = line.match(/^(\*+)(\s+)(.*)$/);
-    if (match) {
-      const stars = match[1].length;
-      const content = match[3];
-      let cleanContent = content.replace(/^(\*+)(\s*)/, '');
-      result.push(`${'  '.repeat(stars - 1)}• ${cleanContent}`);
-    } else {
-      result.push(line);
-    }
-  });
-  return result.join("\n");
-}
-
-// HTML to Jira wiki markup converter (simplified)
+// HTML to Jira wiki markup converter
 function htmlToJiraWiki(html) {
   if (!html) return "";
 
@@ -150,21 +230,21 @@ function htmlToJiraWiki(html) {
   tempDiv.innerHTML = html;
 
   // Function to process nodes recursively
-  function processNode(node) {
+  function processNode(node, indent = 0) {
     if (node.nodeType === Node.TEXT_NODE) {
       return node.textContent;
     }
 
     if (node.nodeType === Node.ELEMENT_NODE) {
       const tagName = node.tagName.toLowerCase();
-      const children = Array.from(node.childNodes).map(child => processNode(child)).join('');
+      const children = Array.from(node.childNodes).map(child => processNode(child, indent + 1)).join('');
 
       switch (tagName) {
-        case 'b':
         case 'strong':
+        case 'b':
           return `*${children}*`;
-        case 'i':
         case 'em':
+        case 'i':
           return `_${children}_`;
         case 'u':
           return `+${children}+`;
@@ -193,33 +273,39 @@ function htmlToJiraWiki(html) {
           return children;
         case 'ol':
           return children;
-        case 'li':
-          // Determine if it's in a ul or ol
+        case 'li': {
           const parent = node.parentNode;
           if (parent && parent.tagName.toLowerCase() === 'ul') {
-            return `* ${children}\n`;
+            return `${'*'.repeat(indent)} ${children}\n`;
           } else if (parent && parent.tagName.toLowerCase() === 'ol') {
-            return `# ${children}\n`;
+            return `${'#'.repeat(indent)} ${children}\n`;
           }
           return `* ${children}\n`;
-        case 'span':
+        }
+        case 'br':
+          return '\n';
+        case 'span': {
           const style = node.getAttribute('style') || '';
           const colorMatch = style.match(/color:\s*(#[0-9a-fA-F]{6})/);
           if (colorMatch) {
             return `{color:${colorMatch[1]}}${children}{color}`;
           }
           return children;
-        case 'br':
-          return '\n';
+        }
+        case 'pre':
+          return `{code}${children}{code}\n`;
         default:
           return children;
       }
     }
-
     return '';
   }
 
-  return processNode(tempDiv).replace(/\n{3,}/g, '\n\n');
+  return processNode(tempDiv)
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/\*{3,}/g, '**')
+    .replace(/_\s+_/g, '')
+    .trim();
 }
 
 // Calculate statistics from votes
@@ -270,6 +356,10 @@ export default function PokerRoom({ name }) {
   const [issueType, setIssueType] = useState(null);
   const [copied, setCopied] = useState(false);
 
+  // Refs for visual editors
+  const acceptanceEditorRef = useRef(null);
+  const descriptionEditorRef = useRef(null);
+
   // Observer mode states
   const [observers, setObservers] = useState({});
   const [observingTarget, setObservingTarget] = useState(null);
@@ -277,10 +367,8 @@ export default function PokerRoom({ name }) {
 
   // Request initial observers when component mounts
   useEffect(() => {
-    // Request current observer state when joining
     socket.emit("requestObservers");
 
-    // Also request periodically to stay in sync (every 5 seconds)
     const interval = setInterval(() => {
       socket.emit("requestObservers");
     }, 5000);
@@ -354,20 +442,12 @@ export default function PokerRoom({ name }) {
 
     socket.on("observersUpdate", (observerData) => {
       console.log("Received observers update:", observerData);
-      console.log("Current user:", name);
-      console.log("Current user ID:", Object.keys(users).find(uid => users[uid] === name));
-      console.log("New observer state for current user:",
-        Object.keys(users).find(uid => users[uid] === name) ?
-        observerData[Object.keys(users).find(uid => users[uid] === name)] : 'unknown');
-
       setObservers(observerData);
 
-      // If current user becomes an observer, clear their selected card
       const currentUserId = Object.keys(users).find(uid => users[uid] === name);
       if (currentUserId && observerData[currentUserId]) {
         console.log("Current user is now an observer, clearing vote");
         setSelectedCard(null);
-        // Also clear any existing vote by emitting null
         socket.emit("vote", null);
       }
     });
@@ -392,17 +472,6 @@ export default function PokerRoom({ name }) {
   const currentUserId = Object.keys(users).find(uid => users[uid] === name);
   const isCurrentUserObserver = currentUserId ? observers[currentUserId] : false;
 
-  // Log observer status for debugging
-  useEffect(() => {
-    console.log("Current user state:", {
-      name,
-      currentUserId,
-      isCurrentUserObserver,
-      observers,
-      users
-    });
-  }, [name, currentUserId, isCurrentUserObserver, observers, users]);
-
   useEffect(() => {
     if (storyList.length > 0 && currentStoryIndex < storyList.length) {
       setJiraKey(storyList[currentStoryIndex]);
@@ -420,18 +489,21 @@ export default function PokerRoom({ name }) {
     setObservingTarget(null);
   }, [revealed, jiraKey]);
 
-  const handleVote = (value) => {
-    console.log("handleVote called with value:", value);
-    console.log("Current state:", {
-      isCurrentUserObserver,
-      currentUserId,
-      selectedCard,
-      votedUsers
-    });
+  // Initialize visual editor content when entering edit mode
+  useEffect(() => {
+    if (editingAcceptanceVisual && acceptanceCriteria) {
+      setEditAcceptanceVisualValue(jiraWikiToHtml(acceptanceCriteria));
+    }
+  }, [editingAcceptanceVisual, acceptanceCriteria]);
 
-    // Observers cannot vote
+  useEffect(() => {
+    if (editingDescriptionVisual && description) {
+      setEditDescriptionVisualValue(jiraWikiToHtml(description));
+    }
+  }, [editingDescriptionVisual, description]);
+
+  const handleVote = (value) => {
     if (isCurrentUserObserver) {
-      console.log("Observer cannot vote");
       alert("You are in observer mode and cannot vote");
       return;
     }
@@ -442,12 +514,10 @@ export default function PokerRoom({ name }) {
     }
 
     if (selectedCard === value) {
-      console.log("Deselecting card:", value);
       setSelectedCard(null);
       setVotedUsers(prev => prev.filter(uid => uid !== currentUserId));
       socket.emit("vote", null);
     } else {
-      console.log("Selecting card:", value);
       setSelectedCard(value);
       if (!votedUsers.includes(currentUserId)) {
         setVotedUsers(prev => [...prev, currentUserId]);
@@ -457,53 +527,29 @@ export default function PokerRoom({ name }) {
   };
 
   const toggleObserver = (userId) => {
-    if (!isSarthak) {
-      console.log("Only Sarthak can toggle observers");
-      return;
-    }
+    if (!isSarthak) return;
 
-    console.log("Toggling observer for user:", userId);
-    console.log("Current observer state:", observers[userId]);
-
-    // Optimistically update local state for immediate UI feedback
     const newObserverState = !observers[userId];
 
-    setObservers(prev => {
-      const newState = {
-        ...prev,
-        [userId]: newObserverState
-      };
-      console.log("Optimistically updated observers state:", newState);
-      return newState;
-    });
+    setObservers(prev => ({
+      ...prev,
+      [userId]: newObserverState
+    }));
 
-    // If toggling current user and they become observer, clear their vote
     if (userId === currentUserId && newObserverState) {
-      console.log("Clearing vote for current user who became observer");
       setSelectedCard(null);
       socket.emit("vote", null);
     }
 
-    // Emit socket event to server
     socket.emit("toggleObserver", userId);
-
-    // Force a request for updated observers after a short delay
-    setTimeout(() => {
-      socket.emit("requestObservers");
-    }, 500);
   };
 
   const observeUser = (userId) => {
-    if (!isCurrentUserObserver) {
-      console.log("Only observers can observe others");
-      return;
-    }
+    if (!isCurrentUserObserver) return;
 
     if (observingTarget === userId) {
-      console.log("Stopping observation of:", users[userId]);
       setObservingTarget(null);
     } else {
-      console.log("Starting observation of:", users[userId]);
       setObservingTarget(userId);
     }
   };
@@ -514,6 +560,54 @@ export default function PokerRoom({ name }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // Apply formatting in visual editor
+  const applyFormatting = (command, value = null, type = 'acceptance') => {
+    document.execCommand(command, false, value);
+
+    // Update the state with the new content
+    if (type === 'acceptance' && acceptanceEditorRef.current) {
+      setEditAcceptanceVisualValue(acceptanceEditorRef.current.innerHTML);
+    } else if (type === 'description' && descriptionEditorRef.current) {
+      setEditDescriptionVisualValue(descriptionEditorRef.current.innerHTML);
+    }
+  };
+
+  // Insert Jira-specific formatting
+  const insertJiraFormatting = (format, type = 'acceptance') => {
+    const selection = window.getSelection();
+    const range = selection.getRangeAt(0);
+    const selectedText = range.toString();
+
+    let formattedText = '';
+    switch(format) {
+      case 'bold':
+        formattedText = `*${selectedText}*`;
+        break;
+      case 'italic':
+        formattedText = `_${selectedText}_`;
+        break;
+      case 'underline':
+        formattedText = `+${selectedText}+`;
+        break;
+      case 'code':
+        formattedText = `{{${selectedText}}}`;
+        break;
+      case 'heading':
+        formattedText = `h3. ${selectedText}`;
+        break;
+      default:
+        return;
+    }
+
+    document.execCommand('insertText', false, formattedText);
+
+    if (type === 'acceptance' && acceptanceEditorRef.current) {
+      setEditAcceptanceVisualValue(acceptanceEditorRef.current.innerHTML);
+    } else if (type === 'description' && descriptionEditorRef.current) {
+      setEditDescriptionVisualValue(descriptionEditorRef.current.innerHTML);
+    }
+  };
+
   const allVotesSame = results &&
     Object.values(results.votes).length > 1 &&
     Object.values(results.votes).every(v => v === Object.values(results.votes)[0]);
@@ -522,26 +616,6 @@ export default function PokerRoom({ name }) {
 
   // Calculate stats when results are revealed
   const stats = results && revealed ? calculateStats(results.votes) : null;
-
-  // Force a request for current observers
-  const requestObservers = () => {
-    console.log("Manually requesting observers");
-    socket.emit("requestObservers");
-  };
-
-  // Apply basic formatting in visual editor
-  const applyFormatting = (command, value = null) => {
-    document.execCommand(command, false, value);
-    // Update the state with the new content
-    const editor = document.querySelector('.visual-editor.active');
-    if (editor) {
-      if (editingAcceptanceVisual) {
-        setEditAcceptanceVisualValue(editor.innerHTML);
-      } else if (editingDescriptionVisual) {
-        setEditDescriptionVisualValue(editor.innerHTML);
-      }
-    }
-  };
 
   return (
     <div className="poker-room">
@@ -729,7 +803,8 @@ export default function PokerRoom({ name }) {
                   className="story-action-btn"
                   onClick={() => setShowVisual(!showVisual)}
                 >
-                  {showVisual ? 'Text View' : 'Visual View'}
+                  {showVisual ? <FaMarkdown /> : <FaEye />}
+                  {showVisual ? 'Raw Text' : 'Formatted View'}
                 </button>
               )}
             </div>
@@ -746,24 +821,18 @@ export default function PokerRoom({ name }) {
                           setEditingAcceptance(true);
                           setEditAcceptanceValue(acceptanceCriteria);
                         }}
-                        title="Edit in text mode"
+                        title="Edit in raw text mode"
                       >
-                        <FaPencilAlt /> Text
+                        <FaPencilAlt /> Raw
                       </button>
                       <button
                         className="edit-btn visual-edit-btn"
                         onClick={() => {
                           setEditingAcceptanceVisual(true);
-                          // If in visual mode, use the current visual content, otherwise convert from wiki
-                          setEditAcceptanceVisualValue(
-                            showVisual ?
-                            acceptanceCriteria :
-                            jiraWikiToHtml(acceptanceCriteria)
-                          );
                         }}
-                        title="Edit in visual mode"
+                        title="Edit in formatted mode"
                       >
-                        <FaPencilAlt /> Visual
+                        <FaEye /> Formatted
                       </button>
                     </div>
                   )}
@@ -772,18 +841,20 @@ export default function PokerRoom({ name }) {
                 {!editingAcceptance && !editingAcceptanceVisual ? (
                   showVisual ? (
                     <div
-                      className="jira-content"
+                      className="jira-content formatted-view"
                       dangerouslySetInnerHTML={{ __html: jiraWikiToHtml(acceptanceCriteria) }}
                     />
                   ) : (
-                    <pre className="text-content">{jiraWikiToIndentedText(acceptanceCriteria)}</pre>
+                    <pre className="text-content raw-view">{acceptanceCriteria}</pre>
                   )
                 ) : editingAcceptance ? (
-                  <div className="edit-mode">
+                  <div className="edit-mode raw-edit-mode">
                     <textarea
                       value={editAcceptanceValue}
                       onChange={e => setEditAcceptanceValue(e.target.value)}
-                      rows={6}
+                      rows={12}
+                      className="raw-editor"
+                      placeholder="Enter Jira wiki markup..."
                     />
                     <div className="edit-actions">
                       <button className="btn-save" onClick={() => {
@@ -801,74 +872,99 @@ export default function PokerRoom({ name }) {
                     <div className="visual-edit-toolbar">
                       <button
                         className="toolbar-btn"
-                        onClick={() => applyFormatting('bold')}
+                        onClick={() => applyFormatting('bold', null, 'acceptance')}
                         title="Bold"
                         type="button"
                       >
-                        <b>B</b>
+                        <FaBold />
                       </button>
                       <button
                         className="toolbar-btn"
-                        onClick={() => applyFormatting('italic')}
+                        onClick={() => applyFormatting('italic', null, 'acceptance')}
                         title="Italic"
                         type="button"
                       >
-                        <i>I</i>
+                        <FaItalic />
                       </button>
                       <button
                         className="toolbar-btn"
-                        onClick={() => applyFormatting('underline')}
+                        onClick={() => applyFormatting('underline', null, 'acceptance')}
                         title="Underline"
                         type="button"
                       >
-                        <u>U</u>
+                        <FaUnderline />
                       </button>
+                      <div className="toolbar-divider"></div>
                       <button
                         className="toolbar-btn"
-                        onClick={() => applyFormatting('insertUnorderedList')}
+                        onClick={() => applyFormatting('insertUnorderedList', null, 'acceptance')}
                         title="Bullet List"
                         type="button"
                       >
-                        • List
+                        <FaListUl />
                       </button>
                       <button
                         className="toolbar-btn"
-                        onClick={() => applyFormatting('insertOrderedList')}
+                        onClick={() => applyFormatting('insertOrderedList', null, 'acceptance')}
                         title="Numbered List"
                         type="button"
                       >
-                        1. List
+                        <FaListOl />
                       </button>
+                      <div className="toolbar-divider"></div>
                       <button
                         className="toolbar-btn"
-                        onClick={() => applyFormatting('formatBlock', 'h3')}
+                        onClick={() => applyFormatting('formatBlock', 'h3', 'acceptance')}
                         title="Heading"
                         type="button"
                       >
-                        H
+                        <FaHeading />
                       </button>
-                      <span className="toolbar-hint">(Visual editor - basic formatting supported)</span>
+                      <button
+                        className="toolbar-btn"
+                        onClick={() => insertJiraFormatting('code', 'acceptance')}
+                        title="Code"
+                        type="button"
+                      >
+                        <FaCode />
+                      </button>
+                      <span className="toolbar-hint">Editor</span>
                     </div>
                     <div
+                      ref={acceptanceEditorRef}
                       className="visual-editor active"
                       contentEditable={true}
                       dangerouslySetInnerHTML={{ __html: editAcceptanceVisualValue }}
-                      onInput={(e) => setEditAcceptanceVisualValue(e.currentTarget.innerHTML)}
+                      onInput={(e) => {
+                        // Save cursor position
+                        const savedPos = saveCursorPosition(e.currentTarget);
+                        // Update state
+                        setEditAcceptanceVisualValue(e.currentTarget.innerHTML);
+                        // Restore cursor position after state update
+                        setTimeout(() => {
+                          if (acceptanceEditorRef.current && savedPos) {
+                            restoreCursorPosition(acceptanceEditorRef.current, savedPos);
+                          }
+                        }, 0);
+                      }}
                       onBlur={(e) => setEditAcceptanceVisualValue(e.currentTarget.innerHTML)}
                       style={{
                         border: '1px solid #ddd',
-                        padding: '12px',
-                        minHeight: '200px',
+                        padding: '16px',
+                        minHeight: '250px',
+                        maxHeight: '500px',
+                        overflowY: 'auto',
                         borderRadius: '4px',
                         backgroundColor: 'white',
                         outline: 'none',
-                        overflowY: 'auto'
+                        fontFamily: 'Arial, sans-serif',
+                        fontSize: '14px',
+                        lineHeight: '1.5'
                       }}
                       suppressContentEditableWarning={true}
                     />
                     <div className="edit-actions">
                       <button className="btn-save" onClick={() => {
-                        // Convert HTML back to Jira wiki format before saving
                         const wikiContent = htmlToJiraWiki(editAcceptanceVisualValue);
                         socket.emit("updateAcceptanceCriteria", {
                           jiraKey,
@@ -895,24 +991,18 @@ export default function PokerRoom({ name }) {
                           setEditingDescription(true);
                           setEditDescriptionValue(description);
                         }}
-                        title="Edit in text mode"
+                        title="Edit in raw text mode"
                       >
-                        <FaPencilAlt /> Text
+                        <FaPencilAlt /> Raw
                       </button>
                       <button
                         className="edit-btn visual-edit-btn"
                         onClick={() => {
                           setEditingDescriptionVisual(true);
-                          // If in visual mode, use the current visual content, otherwise convert from wiki
-                          setEditDescriptionVisualValue(
-                            showVisual ?
-                            description :
-                            jiraWikiToHtml(description)
-                          );
                         }}
-                        title="Edit in visual mode"
+                        title="Edit in formatted mode"
                       >
-                        <FaPencilAlt /> Visual
+                        <FaEye /> Formatted
                       </button>
                     </div>
                   )}
@@ -921,18 +1011,20 @@ export default function PokerRoom({ name }) {
                 {!editingDescription && !editingDescriptionVisual ? (
                   showVisual ? (
                     <div
-                      className="jira-content"
+                      className="jira-content formatted-view"
                       dangerouslySetInnerHTML={{ __html: jiraWikiToHtml(description) }}
                     />
                   ) : (
-                    <pre className="text-content">{jiraWikiToIndentedText(description)}</pre>
+                    <pre className="text-content raw-view">{description}</pre>
                   )
                 ) : editingDescription ? (
-                  <div className="edit-mode">
+                  <div className="edit-mode raw-edit-mode">
                     <textarea
                       value={editDescriptionValue}
                       onChange={e => setEditDescriptionValue(e.target.value)}
-                      rows={6}
+                      rows={12}
+                      className="raw-editor"
+                      placeholder="Enter Jira wiki markup..."
                     />
                     <div className="edit-actions">
                       <button className="btn-save" onClick={() => {
@@ -950,74 +1042,99 @@ export default function PokerRoom({ name }) {
                     <div className="visual-edit-toolbar">
                       <button
                         className="toolbar-btn"
-                        onClick={() => applyFormatting('bold')}
+                        onClick={() => applyFormatting('bold', null, 'description')}
                         title="Bold"
                         type="button"
                       >
-                        <b>B</b>
+                        <FaBold />
                       </button>
                       <button
                         className="toolbar-btn"
-                        onClick={() => applyFormatting('italic')}
+                        onClick={() => applyFormatting('italic', null, 'description')}
                         title="Italic"
                         type="button"
                       >
-                        <i>I</i>
+                        <FaItalic />
                       </button>
                       <button
                         className="toolbar-btn"
-                        onClick={() => applyFormatting('underline')}
+                        onClick={() => applyFormatting('underline', null, 'description')}
                         title="Underline"
                         type="button"
                       >
-                        <u>U</u>
+                        <FaUnderline />
                       </button>
+                      <div className="toolbar-divider"></div>
                       <button
                         className="toolbar-btn"
-                        onClick={() => applyFormatting('insertUnorderedList')}
+                        onClick={() => applyFormatting('insertUnorderedList', null, 'description')}
                         title="Bullet List"
                         type="button"
                       >
-                        • List
+                        <FaListUl />
                       </button>
                       <button
                         className="toolbar-btn"
-                        onClick={() => applyFormatting('insertOrderedList')}
+                        onClick={() => applyFormatting('insertOrderedList', null, 'description')}
                         title="Numbered List"
                         type="button"
                       >
-                        1. List
+                        <FaListOl />
                       </button>
+                      <div className="toolbar-divider"></div>
                       <button
                         className="toolbar-btn"
-                        onClick={() => applyFormatting('formatBlock', 'h3')}
+                        onClick={() => applyFormatting('formatBlock', 'h3', 'description')}
                         title="Heading"
                         type="button"
                       >
-                        H
+                        <FaHeading />
                       </button>
-                      <span className="toolbar-hint">(Visual editor - basic formatting supported)</span>
+                      <button
+                        className="toolbar-btn"
+                        onClick={() => insertJiraFormatting('code', 'description')}
+                        title="Code"
+                        type="button"
+                      >
+                        <FaCode />
+                      </button>
+                      <span className="toolbar-hint">Editor</span>
                     </div>
                     <div
+                      ref={descriptionEditorRef}
                       className="visual-editor active"
                       contentEditable={true}
                       dangerouslySetInnerHTML={{ __html: editDescriptionVisualValue }}
-                      onInput={(e) => setEditDescriptionVisualValue(e.currentTarget.innerHTML)}
+                      onInput={(e) => {
+                        // Save cursor position
+                        const savedPos = saveCursorPosition(e.currentTarget);
+                        // Update state
+                        setEditDescriptionVisualValue(e.currentTarget.innerHTML);
+                        // Restore cursor position after state update
+                        setTimeout(() => {
+                          if (descriptionEditorRef.current && savedPos) {
+                            restoreCursorPosition(descriptionEditorRef.current, savedPos);
+                          }
+                        }, 0);
+                      }}
                       onBlur={(e) => setEditDescriptionVisualValue(e.currentTarget.innerHTML)}
                       style={{
                         border: '1px solid #ddd',
-                        padding: '12px',
-                        minHeight: '200px',
+                        padding: '16px',
+                        minHeight: '250px',
+                        maxHeight: '500px',
+                        overflowY: 'auto',
                         borderRadius: '4px',
                         backgroundColor: 'white',
                         outline: 'none',
-                        overflowY: 'auto'
+                        fontFamily: 'Arial, sans-serif',
+                        fontSize: '14px',
+                        lineHeight: '1.5'
                       }}
                       suppressContentEditableWarning={true}
                     />
                     <div className="edit-actions">
                       <button className="btn-save" onClick={() => {
-                        // Convert HTML back to Jira wiki format before saving
                         const wikiContent = htmlToJiraWiki(editDescriptionVisualValue);
                         socket.emit("updateDescription", {
                           jiraKey,
