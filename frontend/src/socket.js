@@ -1,2 +1,2 @@
 import { io } from "socket.io-client";
-export const socket = io("http://localhost:4000");
+export const socket = io("https://poker-planning-1.onrender.com");
