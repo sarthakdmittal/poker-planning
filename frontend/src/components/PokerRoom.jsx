@@ -998,19 +998,7 @@ export default function PokerRoom({ name }) {
                       className="visual-editor active"
                       contentEditable={true}
                       dangerouslySetInnerHTML={{ __html: editAcceptanceVisualValue }}
-                      onInput={(e) => {
-                        // Save cursor position
-                        const savedPos = saveCursorPosition(e.currentTarget);
-                        // Update state
-                        setEditAcceptanceVisualValue(e.currentTarget.innerHTML);
-                        // Restore cursor position after state update
-                        setTimeout(() => {
-                          if (acceptanceEditorRef.current && savedPos) {
-                            restoreCursorPosition(acceptanceEditorRef.current, savedPos);
-                          }
-                        }, 0);
-                      }}
-                      onBlur={(e) => setEditAcceptanceVisualValue(e.currentTarget.innerHTML)}
+                      suppressContentEditableWarning={true}
                       style={{
                         border: '1px solid #ddd',
                         padding: '16px',
@@ -1024,11 +1012,11 @@ export default function PokerRoom({ name }) {
                         fontSize: '14px',
                         lineHeight: '1.5'
                       }}
-                      suppressContentEditableWarning={true}
                     />
                     <div className="edit-actions">
                       <button className="btn-save" onClick={() => {
-                        const wikiContent = htmlToJiraWiki(editAcceptanceVisualValue);
+                        const html = acceptanceEditorRef.current.innerHTML;
+                        const wikiContent = htmlToJiraWiki(html);
                         socket.emit("updateAcceptanceCriteria", {
                           jiraKey,
                           acceptanceCriteria: wikiContent
@@ -1168,18 +1156,18 @@ export default function PokerRoom({ name }) {
                       className="visual-editor active"
                       contentEditable={true}
                       dangerouslySetInnerHTML={{ __html: editDescriptionVisualValue }}
-                      onInput={(e) => {
-                        // Save cursor position
-                        const savedPos = saveCursorPosition(e.currentTarget);
-                        // Update state
-                        setEditDescriptionVisualValue(e.currentTarget.innerHTML);
-                        // Restore cursor position after state update
-                        setTimeout(() => {
-                          if (descriptionEditorRef.current && savedPos) {
-                            restoreCursorPosition(descriptionEditorRef.current, savedPos);
-                          }
-                        }, 0);
-                      }}
+//                       onInput={(e) => {
+//                         // Save cursor position
+//                         const savedPos = saveCursorPosition(e.currentTarget);
+//                         // Update state
+//                         setEditDescriptionVisualValue(e.currentTarget.innerHTML);
+//                         // Restore cursor position after state update
+//                         setTimeout(() => {
+//                           if (descriptionEditorRef.current && savedPos) {
+//                             restoreCursorPosition(descriptionEditorRef.current, savedPos);
+//                           }
+//                         }, 0);
+//                       }}
                       onBlur={(e) => setEditDescriptionVisualValue(e.currentTarget.innerHTML)}
                       style={{
                         border: '1px solid #ddd',
@@ -1198,7 +1186,8 @@ export default function PokerRoom({ name }) {
                     />
                     <div className="edit-actions">
                       <button className="btn-save" onClick={() => {
-                        const wikiContent = htmlToJiraWiki(editDescriptionVisualValue);
+                        const html = descriptionEditorRef.current.innerHTML;
+                        const wikiContent = htmlToJiraWiki(html);
                         socket.emit("updateDescription", {
                           jiraKey,
                           description: wikiContent
