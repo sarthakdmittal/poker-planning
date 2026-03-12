@@ -101,7 +101,7 @@ function jiraWikiToHtml(text) {
     if (!str) return "";
 
     // Handle {*}bold{*} syntax (this is the one causing your issue)
-    str = str.replace(/\{\*\}(.*?)\{\*\}/g, "<strong>$1</strong>");
+    str = str.replace(/\{\*\}(.*?)\{\*\}/g, '<span data-jira-bold="true">$1</span>');
 
     // Handle *bold* syntax
     str = str.replace(/\*([^*]+)\*/g, "<strong>$1</strong>");
@@ -223,89 +223,152 @@ function jiraWikiToHtml(text) {
 
 // HTML to Jira wiki markup converter
 function htmlToJiraWiki(html) {
-  if (!html) return "";
-
-  // Create a temporary div to parse HTML
   const tempDiv = document.createElement('div');
   tempDiv.innerHTML = html;
 
-  // Function to process nodes recursively
-  function processNode(node, indent = 0) {
+  function processNode(node) {
+
+    // TEXT NODE
     if (node.nodeType === Node.TEXT_NODE) {
-      return node.textContent;
+      return node.textContent
+        .replace(/\bMap\b(?!<)/g, 'Map<String, Object>');
     }
 
-    if (node.nodeType === Node.ELEMENT_NODE) {
-      const tagName = node.tagName.toLowerCase();
-      const children = Array.from(node.childNodes).map(child => processNode(child, indent + 1)).join('');
+    if (node.nodeType !== Node.ELEMENT_NODE) return '';
 
-      switch (tagName) {
-        case 'strong':
-        case 'b':
-          return `*${children}*`;
-        case 'em':
-        case 'i':
-          return `_${children}_`;
-        case 'u':
-          return `+${children}+`;
-        case 'code':
-          return `{{${children}}}`;
-        case 'a':
-          const href = node.getAttribute('href') || '';
-          return `[${children}|${href}]`;
-        case 'h1':
-          return `h1. ${children}\n`;
-        case 'h2':
-          return `h2. ${children}\n`;
-        case 'h3':
-          return `h3. ${children}\n`;
-        case 'h4':
-          return `h4. ${children}\n`;
-        case 'h5':
-          return `h5. ${children}\n`;
-        case 'h6':
-          return `h6. ${children}\n`;
-        case 'p':
-          return `${children}\n`;
-        case 'div':
-          return `${children}\n`;
-        case 'ul':
-          return children;
-        case 'ol':
-          return children;
-        case 'li': {
-          const parent = node.parentNode;
-          if (parent && parent.tagName.toLowerCase() === 'ul') {
-            return `${'*'.repeat(indent)} ${children}\n`;
-          } else if (parent && parent.tagName.toLowerCase() === 'ol') {
-            return `${'#'.repeat(indent)} ${children}\n`;
-          }
-          return `* ${children}\n`;
+    const tagName = node.tagName.toLowerCase();
+
+    const children = Array.from(node.childNodes)
+      .map(child => processNode(child))
+      .join('');
+
+    switch (tagName) {
+
+      case 'strong':
+      case 'b': {
+        const text = children.trim();
+
+        if (/^\{\*.*\*\}$/.test(text) || /^\*.*\*$/.test(text)) {
+          return text;
         }
-        case 'br':
-          return '\n';
-        case 'span': {
-          const style = node.getAttribute('style') || '';
-          const colorMatch = style.match(/color:\s*(#[0-9a-fA-F]{6})/);
-          if (colorMatch) {
-            return `{color:${colorMatch[1]}}${children}{color}`;
-          }
-          return children;
-        }
-        case 'pre':
-          return `{code}${children}{code}\n`;
-        default:
-          return children;
+
+        return `*${text}*`;
       }
+
+      case 'em':
+      case 'i':
+        return `_${children}_`;
+
+      case 'u':
+        return `+${children}+`;
+
+      case 'code': {
+        const text = children.trim();
+
+        if (/^\{\{.*\}\}$/.test(text)) {
+          return text;
+        }
+
+        return `{{${text}}}`;
+      }
+
+      case 'a': {
+        const href = node.getAttribute('href') || '';
+        return `[${children}|${href}]`;
+      }
+
+      case 'h1':
+      case 'h2':
+      case 'h3':
+      case 'h4':
+      case 'h5':
+      case 'h6': {
+        const level = tagName;
+
+        const text = children
+          .replace(/^\{\*(.*?)\*\}$/, '$1')
+          .replace(/^\*(.*?)\*$/, '$1')
+          .trim();
+
+        return `${level}. +${text}+\n\n`;
+      }
+
+      case 'p': {
+        const text = children.trim();
+        return text ? `${text}\n\n` : '\n';
+      }
+
+      case 'div':
+        return `${children}\n`;
+
+      case 'ul':
+      case 'ol':
+        return children;
+
+      case 'li': {
+
+        let depth = 1;
+        let parent = node.parentNode;
+        let listType = 'ul';
+
+        while (parent) {
+          const tag = parent.tagName?.toLowerCase();
+
+          if (tag === 'ul' || tag === 'ol') {
+            depth++;
+            listType = tag;
+          }
+
+          parent = parent.parentNode;
+        }
+
+        const marker =
+          node.parentNode?.tagName?.toLowerCase() === 'ol'
+            ? '#'
+            : '*';
+
+        return `${marker.repeat(depth - 1)} ${children.trim()}\n`;
+      }
+
+      case 'br':
+        return '\n';
+
+      case 'span': {
+
+        if (node.getAttribute('data-jira-bold') === 'true') {
+          return `{*${children}*}`;
+        }
+
+        const style = node.getAttribute('style') || '';
+
+        const colorMatch = style.match(/color:\s*(#[0-9a-fA-F]{6})/);
+
+        if (colorMatch) {
+          return `{color:${colorMatch[1]}}${children}{color}`;
+        }
+
+        return children;
+      }
+
+      case 'pre':
+        return `{code}${children}{code}\n\n`;
+
+      default:
+        return children;
     }
-    return '';
   }
 
-  return processNode(tempDiv)
+  let result = processNode(tempDiv)
     .replace(/\n{3,}/g, '\n\n')
-    .replace(/\*{3,}/g, '**')
     .replace(/_\s+_/g, '')
+    .replace(/[ \t]+\n/g, '\n')
+
+    // restore Jira strong emphasis {*text*}
+    .replace(/\{\*(.*?)\*\}/g, '{*}$1{*}')
+
     .trim();
+
+  return result;
 }
 
 // Calculate statistics from votes
