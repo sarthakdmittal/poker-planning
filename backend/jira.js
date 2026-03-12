@@ -109,25 +109,37 @@ async function getJiraIssueSummary(issueKey) {
 async function getJiraIssueDetails(issueKey) {
   try {
     const issue = await jira.issue.getIssue({ issueKey });
+
     let desc = issue.fields[process.env.JIRA_DESCRIPTION_FIELD];
     if (typeof desc !== 'string') desc = issue.fields.description;
+
     let acceptanceCriteria = issue.fields[process.env.JIRA_ACCEPTANCE_CRITERIA_FIELD];
-    if (acceptanceCriteria === null){
-    return {
-          summary: issue.fields.summary,
-          description: desc
-        };
+
+    const issueType = issue.fields.issuetype?.name;
+
+    if (acceptanceCriteria === null) {
+      return {
+        summary: issue.fields.summary,
+        description: desc,
+        issueType: issueType
+      };
+    } else {
+      return {
+        summary: issue.fields.summary,
+        acceptanceCriteria: acceptanceCriteria,
+        description: desc,
+        issueType: issueType
+      };
     }
-    else{
-    return {
-      summary: issue.fields.summary,
-      acceptanceCriteria: acceptanceCriteria,
-      description: desc
-    };
-  }
-  }catch (err) {
+
+  } catch (err) {
     console.error('Failed to fetch Jira issue details:', err.message);
-    return { summary: null, acceptanceCriteria: null, description: null };
+    return {
+      summary: null,
+      acceptanceCriteria: null,
+      description: null,
+      issueType: null
+    };
   }
 }
 
