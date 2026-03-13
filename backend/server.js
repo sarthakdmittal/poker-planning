@@ -2,7 +2,15 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
-const { updateJiraStoryPoints, updateJiraDescription, getJiraIssueSummary, getJiraIssueDetails, updateJiraAcceptanceCriteria } = require("./jira");
+const {
+  updateJiraStoryPoints,
+  updateJiraDescription,
+  getJiraIssueSummary,
+  getJiraIssueDetails,
+  updateJiraAcceptanceCriteria,
+  updateJiraStatus,
+  getJiraIssueStatus
+} = require("./jira");
 
 const app = express();
 app.use(cors());
@@ -17,34 +25,93 @@ let room = {
   votes: {},
   revealed: false,
   finalPoint: null,
-  admin: null // Track admin name
+  admin: null, // Track admin name
+  observers: {} // Track which users are observers { socketId: boolean }
 };
 
 function emitUsersAndAdmin() {
   io.emit("users", room.users);
-  io.emit("admin", room.admin); // Now admin is a name
+  io.emit("admin", room.admin);
+}
+
+function emitObserversUpdate() {
+  io.emit("observersUpdate", room.observers);
+}
+
+async function emitJiraDetails(details, socket = null) {
+  const payload = {
+    summary: details.summary,
+    acceptanceCriteria: details.acceptanceCriteria,
+    description: details.description,
+    issueType: details.issueType,
+    status: details.status
+  };
+  if (socket) {
+    socket.emit("jiraDetails", payload);
+  } else {
+    io.emit("jiraDetails", payload);
+  }
 }
 
 io.on("connection", (socket) => {
 
   socket.on("join", ({ name }) => {
     room.users[socket.id] = name;
+    // Initialize observer status for new user (default to false)
+    if (room.observers[socket.id] === undefined) {
+      room.observers[socket.id] = false;
+    }
+
     // Set admin if not set
     if (!room.admin) {
       room.admin = name;
     }
+
     emitUsersAndAdmin();
+    emitObserversUpdate(); // Send observer status to all clients
   });
 
   socket.on("vote", (point) => {
+    // Check if user is observer before allowing vote
+    if (room.observers[socket.id]) {
+      // Observer trying to vote - ignore or send error
+      socket.emit("voteError", "Observers cannot vote");
+      return;
+    }
+
     if (point === null) {
-      delete room.votes[socket.id];   // 🔥 remove vote completely
+      delete room.votes[socket.id];
     } else {
       room.votes[socket.id] = point;
     }
 
     io.emit("votes", Object.keys(room.votes).length);
     io.emit("voteUpdate", { votes: room.votes, users: room.users });
+  });
+
+
+
+  socket.on("toggleObserver", (userId) => {
+    // Toggle observer status for the specified user
+    if (room.observers[userId] !== undefined) {
+      room.observers[userId] = !room.observers[userId];
+
+      // If user is now an observer, clear their vote
+      if (room.observers[userId]) {
+        delete room.votes[userId];
+      }
+
+      // Broadcast the updated observer status to all clients
+      emitObserversUpdate();
+
+      // Also send updated votes since we might have cleared a vote
+      io.emit("voteUpdate", { votes: room.votes, users: room.users });
+    }
+  });
+
+  socket.on("requestObservers", () => {
+    // Send current observer status to requesting client
+    socket.emit("observersUpdate", room.observers);
   });
 
   socket.on("reveal", () => {
@@ -74,6 +141,7 @@ io.on("connection", (socket) => {
         const details = await getJiraIssueDetails(jiraKey);
         issueTitle = details.summary;
         acceptanceCriteria = details.acceptanceCriteria;
+        emitJiraDetails(details);
       } catch (err) {
         console.error("Failed to update Jira:", err.message);
       }
@@ -92,19 +160,23 @@ io.on("connection", (socket) => {
     const leavingName = room.users[socket.id];
     delete room.users[socket.id];
     delete room.votes[socket.id];
+    delete room.observers[socket.id]; // Clean up observer status
+
     // If admin left, pick a new admin by name
     if (room.admin === leavingName) {
       const userIds = Object.keys(room.users);
       room.admin = userIds.length > 0 ? room.users[userIds[0]] : null;
     }
+
     emitUsersAndAdmin();
+    emitObserversUpdate(); // Send updated observer list
   });
 
   socket.on("fetchJiraDetails", async (jiraKey) => {
     if (jiraKey) {
       try {
         const details = await getJiraIssueDetails(jiraKey);
-        io.emit("jiraDetails", details);
+        emitJiraDetails(details);
       } catch (err) {
         console.error("Failed to fetch Jira details:", err.message);
       }
@@ -116,9 +188,8 @@ io.on("connection", (socket) => {
     if (jiraKey && acceptanceCriteria != null) {
       try {
         await updateJiraAcceptanceCriteria(jiraKey, acceptanceCriteria);
-        // Fetch updated details and broadcast
         const details = await getJiraIssueDetails(jiraKey);
-        io.emit("jiraDetails", details);
+        emitJiraDetails(details);
         console.log("Acceptance Criteria updated and broadcasted for issue:", jiraKey);
         console.log(`SUCCESS: Acceptance Criteria updated for ${jiraKey}`);
       } catch (err) {
@@ -132,9 +203,8 @@ io.on("connection", (socket) => {
     if (jiraKey && description != null) {
       try {
         await updateJiraDescription(jiraKey, description);
-        // Fetch updated details and broadcast
         const details = await getJiraIssueDetails(jiraKey);
-        io.emit("jiraDetails", details);
+        emitJiraDetails(details);
         console.log("Description updated and broadcasted for issue:", jiraKey);
         console.log(`SUCCESS: Description updated for ${jiraKey}`);
       } catch (err) {
@@ -148,9 +218,8 @@ io.on("connection", (socket) => {
     if (jiraKey && storyPoints != null) {
       try {
         await updateJiraStoryPoints(jiraKey, storyPoints);
-        // Fetch updated details and broadcast
         const details = await getJiraIssueDetails(jiraKey);
-        io.emit("jiraDetails", details);
+        emitJiraDetails(details);
         console.log("Story Points updated and broadcasted for issue:", jiraKey);
         console.log(`SUCCESS: Story Points updated for ${jiraKey}`);
       } catch (err) {
@@ -158,11 +227,36 @@ io.on("connection", (socket) => {
       }
     }
   });
+
+  socket.on("updateStoryStatus", async ({ jiraKey, status }) => {
+    console.log("Received updateStoryStatus event:", { jiraKey, status });
+
+    if (jiraKey && status) {
+      try {
+        await updateJiraStatus(jiraKey, status);
+        const details = await getJiraIssueDetails(jiraKey);
+        io.emit("storyStatusUpdate", { jiraKey, status });
+        emitJiraDetails(details);
+        emitJiraDetails(details, socket);
+        console.log(`SUCCESS: Status updated for ${jiraKey} to ${status}`);
+      } catch (err) {
+        console.error("Failed to update Jira Status:", err.message);
+        socket.emit("statusUpdateError", {
+          jiraKey,
+          error: "Failed to update status in Jira"
+        });
+      }
+    }
+  });
 });
 
-// For testing: update description on a known issue
-// Uncomment and set a real issue key to test
-// updateJiraDescription('EIPAAS-20957', 'Test update from API').then(() => process.exit());
+
+
+app.get('/api/test-issue', async (req, res) => {
+  const details = await getJiraIssueDetails('EIPAAS-20957');
+  console.log('Sending issue to frontend:', details);
+  res.json(details);
+});
 
 server.listen(4000, () =>
   console.log("Backend running on http://localhost:4000")

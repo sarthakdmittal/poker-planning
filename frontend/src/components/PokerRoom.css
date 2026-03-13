@@ -2182,3 +2182,240 @@
 .visual-editor u {
   text-decoration: underline;
 }
+
+/* Add to your PokerRoom.css file */
+
+/* Story Status Dropdown */
+.story-status-dropdown {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #f8f9fa, #ffffff);
+  border-radius: 50px;
+  border: 1px solid rgba(102, 126, 234, 0.2);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+}
+
+.story-status-dropdown:hover {
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.15);
+  border-color: rgba(102, 126, 234, 0.3);
+  transform: translateY(-2px);
+}
+
+.story-status-dropdown label {
+  font-weight: 600;
+  font-size: 14px;
+  color: #495057;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.story-status-dropdown select {
+  flex: 1;
+  padding: 10px 16px;
+  border: 2px solid #e9ecef;
+  border-radius: 40px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #495057;
+  background-color: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23667eea' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 16px;
+  padding-right: 40px;
+}
+
+.story-status-dropdown select:hover {
+  border-color: #667eea;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1);
+  transform: translateY(-1px);
+}
+
+.story-status-dropdown select:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.15);
+}
+
+.story-status-dropdown select:disabled {
+  background-color: #f8f9fa;
+  border-color: #dee2e6;
+  color: #adb5bd;
+  cursor: not-allowed;
+  opacity: 0.7;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23adb5bd' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+}
+
+/* Style for dropdown options */
+.story-status-dropdown select option {
+  padding: 12px;
+  font-size: 14px;
+  background-color: white;
+  color: #495057;
+}
+
+.story-status-dropdown select option:hover {
+  background-color: #f0ebff;
+}
+
+/* Status color indicators (optional - can be removed if not needed) */
+.story-status-dropdown select option[value="To Do"] {
+  border-left: 3px solid #6c757d;
+}
+
+.story-status-dropdown select option[value="In Progress"] {
+  border-left: 3px solid #007bff;
+}
+
+.story-status-dropdown select option[value="In Review"] {
+  border-left: 3px solid #ffc107;
+}
+
+.story-status-dropdown select option[value="Done"] {
+  border-left: 3px solid #28a745;
+}
+
+.story-status-dropdown select option[value="Closed"] {
+  border-left: 3px solid #6f42c1;
+  font-weight: 600;
+  color: #6f42c1;
+}
+
+.story-status-dropdown select option[value="Ready"] {
+  border-left: 3px solid #17a2b8;
+}
+
+.story-status-dropdown select option[value="Blocked"] {
+  border-left: 3px solid #dc3545;
+}
+
+/* If you want to show the current status with a colored dot */
+.story-status-dropdown {
+  position: relative;
+}
+
+.story-status-dropdown::before {
+  content: '';
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 8px;
+  background-color: currentColor;
+}
+
+/* Different dot colors based on selected status (requires JS to update) */
+.story-status-dropdown.status-todo::before {
+  background-color: #6c757d;
+  box-shadow: 0 0 0 2px rgba(108, 117, 125, 0.2);
+}
+
+.story-status-dropdown.status-in-progress::before {
+  background-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.2);
+}
+
+.story-status-dropdown.status-in-review::before {
+  background-color: #ffc107;
+  box-shadow: 0 0 0 2px rgba(255, 193, 7, 0.2);
+}
+
+.story-status-dropdown.status-done::before {
+  background-color: #28a745;
+  box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.2);
+}
+
+.story-status-dropdown.status-closed::before {
+  background-color: #6f42c1;
+  box-shadow: 0 0 0 2px rgba(111, 66, 193, 0.2);
+}
+
+.story-status-dropdown.status-ready::before {
+  background-color: #17a2b8;
+  box-shadow: 0 0 0 2px rgba(23, 162, 184, 0.2);
+}
+
+.story-status-dropdown.status-blocked::before {
+  background-color: #dc3545;
+  box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.2);
+}
+
+/* Animation for status changes */
+@keyframes statusPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(102, 126, 234, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(102, 126, 234, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(102, 126, 234, 0);
+  }
+}
+
+.story-status-dropdown select:focus {
+  animation: statusPulse 1.5s infinite;
+}
+
+/* Compact mode for smaller screens */
+@media (max-width: 768px) {
+  .story-status-dropdown {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    border-radius: 20px;
+    padding: 16px;
+  }
+
+  .story-status-dropdown select {
+    width: 100%;
+  }
+
+  .story-status-dropdown label {
+    margin-bottom: 4px;
+  }
+}
+
+/* Dark mode support if needed */
+@media (prefers-color-scheme: dark) {
+  .story-status-dropdown {
+    background: linear-gradient(135deg, #2d3436, #1e272e);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .story-status-dropdown label {
+    background: linear-gradient(135deg, #a0a0ff, #c0a0ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .story-status-dropdown select {
+    background-color: #2d3436;
+    border-color: #4a4a4a;
+    color: #e0e0e0;
+  }
+
+  .story-status-dropdown select:hover {
+    border-color: #667eea;
+  }
+
+  .story-status-dropdown select option {
+    background-color: #2d3436;
+    color: #e0e0e0;
+  }
+
+  .story-status-dropdown select option:hover {
+    background-color: #404040;
+  }
+}

@@ -445,6 +445,7 @@ export default function PokerRoom({ name }) {
   const [votedUsers, setVotedUsers] = useState([]);
   const [issueType, setIssueType] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [storyStatus, setStoryStatus] = useState(""); // Tracks the current story status
 
   // Refs for visual editors
   const acceptanceEditorRef = useRef(null);
@@ -454,6 +455,22 @@ export default function PokerRoom({ name }) {
   const [observers, setObservers] = useState({});
   const [observingTarget, setObservingTarget] = useState(null);
   const [userVotes, setUserVotes] = useState({});
+
+
+  const storyStatuses = [
+    "To Do",
+    "In Progress",
+    "In Review",
+    "Done",
+    "Closed",
+    "Ready",
+    "Blocked",
+    "DEV IN PROGRESS",
+    "Code review",
+    "On-Hold",
+    "TEST IN PROGRESS",
+    "READY TO TEST"
+  ];
 
   // Request initial observers when component mounts
   useEffect(() => {
@@ -470,18 +487,21 @@ export default function PokerRoom({ name }) {
     console.log("Setting up socket listeners for:", name);
 
     socket.on("users", (data) => {
-      console.log("Users updated:", data);
       setUsers(data);
     });
 
     socket.on("reveal", (data) => {
-      console.log("Reveal received:", data);
       setResults(data);
       setRevealed(true);
     });
 
+    socket.on("storyStatusUpdate", ({ jiraKey: key, status }) => {
+      if (jiraKey === key) {
+        setStoryStatus(status);
+      }
+    });
+
     socket.on("final", (data) => {
-      console.log("Final received:", data);
       if (typeof data === "object" && data !== null) {
         setFinalPoint(data.point);
         setIssueTitle(data.issueTitle);
@@ -493,13 +513,20 @@ export default function PokerRoom({ name }) {
       }
     });
 
+// Add error handler
+  socket.on("statusUpdateError", ({ error }) => {
+    alert(`Failed to update status: ${error}`);
+  });
+
     socket.on("jiraDetails", (details) => {
-      console.log("Received jiraDetails:", details);
+        console.log("Received jiraDetails:", details);
+        console.log("Status from backend:", details.status);
       setIssueTitle(details.summary);
       setAcceptanceCriteria(details.acceptanceCriteria);
       setDescription(details.description);
       setIssueType(details.issueType);
       setEditingAcceptance(false);
+      setStoryStatus(details.status || "To Do");
       setEditingAcceptanceVisual(false);
       setEditingDescription(false);
       setEditingDescriptionVisual(false);
@@ -542,12 +569,16 @@ export default function PokerRoom({ name }) {
       }
     });
 
+
+
     return () => {
       console.log("Cleaning up socket listeners");
       socket.off("users");
       socket.off("reveal");
       socket.off("final");
       socket.off("jiraDetails");
+      socket.off("storyStatusUpdate");
+      socket.off("statusUpdateError");
       socket.off("reset");
       socket.off("admin");
       socket.off("voteUpdate");
@@ -591,6 +622,33 @@ export default function PokerRoom({ name }) {
       setEditDescriptionVisualValue(jiraWikiToHtml(description));
     }
   }, [editingDescriptionVisual, description]);
+
+// Add this useEffect to update the dropdown container class based on status
+useEffect(() => {
+  const dropdown = document.querySelector('.story-status-dropdown');
+  if (dropdown) {
+    // Remove all status classes
+    dropdown.classList.remove(
+      'status-todo', 'status-in-progress', 'status-in-review',
+      'status-done', 'status-closed', 'status-ready', 'status-blocked'
+    );
+
+    // Add the current status class (convert to kebab-case)
+    const statusClass = `status-${storyStatus.toLowerCase().replace(/\s+/g, '-')}`;
+    dropdown.classList.add(statusClass);
+
+    // Disable dropdown for non-Sarthak users
+    if (name !== 'Sarthak') {
+      dropdown.setAttribute('disabled', 'true');
+      dropdown.style.pointerEvents = 'none';
+      dropdown.style.opacity = '0.6';
+    } else {
+      dropdown.removeAttribute('disabled');
+      dropdown.style.pointerEvents = 'auto';
+      dropdown.style.opacity = '1';
+    }
+  }
+}, [storyStatus, name]);
 
   const handleVote = (value) => {
     if (isCurrentUserObserver) {
@@ -868,6 +926,27 @@ export default function PokerRoom({ name }) {
               )}
             </div>
             <h2 className="story-title">{issueTitle || 'Loading story...'}</h2>
+
+            <div className="story-status-dropdown">
+              <label htmlFor="story-status-select">Status: </label>
+              <select
+                id="story-status-select"
+                value={storyStatus}
+                onChange={(e) => {
+                  const newStatus = e.target.value;
+                  setStoryStatus(newStatus);
+                  socket.emit("updateStoryStatus", {
+                    jiraKey,
+                    status: newStatus
+                  });
+                }}
+                disabled={isCurrentUserObserver}
+              >
+                {storyStatuses.map(status => (
+                  <option key={status} value={status}>{status}</option>
+                ))}
+              </select>
+            </div>
 
             <div className="story-actions">
               {acceptanceCriteria && (
@@ -1183,18 +1262,15 @@ export default function PokerRoom({ name }) {
                       className="visual-editor active"
                       contentEditable={true}
                       dangerouslySetInnerHTML={{ __html: editDescriptionVisualValue }}
-//                       onInput={(e) => {
-//                         // Save cursor position
-//                         const savedPos = saveCursorPosition(e.currentTarget);
-//                         // Update state
-//                         setEditDescriptionVisualValue(e.currentTarget.innerHTML);
-//                         // Restore cursor position after state update
-//                         setTimeout(() => {
-//                           if (descriptionEditorRef.current && savedPos) {
-//                             restoreCursorPosition(descriptionEditorRef.current, savedPos);
-//                           }
-//                         }, 0);
-//                       }}
+                      onInput={(e) => {
+                           const el = e.currentTarget;
+                           const savedPos = saveCursorPosition(el);
+                           const html = el.innerHTML;
+                           setEditDescriptionVisualValue(html);
+                           requestAnimationFrame(() => {
+                             if (el && savedPos) restoreCursorPosition(el, savedPos);
+                           });
+                         }}
                       onBlur={(e) => setEditDescriptionVisualValue(e.currentTarget.innerHTML)}
                       style={{
                         border: '1px solid #ddd',

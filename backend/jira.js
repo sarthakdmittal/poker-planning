@@ -96,6 +96,77 @@ function updateJiraAcceptanceCriteria(issueKey, acceptanceCriteria) {
     });
 }
 
+// Get available transitions for an issue
+async function getJiraTransitions(issueKey) {
+  try {
+    const transitions = await jira.issue.getTransitions({
+      issueKey: issueKey
+    });
+    console.log(`Available transitions for ${issueKey}:`, JSON.stringify(transitions, null, 2));
+    return transitions;
+  } catch (err) {
+    console.error('Failed to fetch Jira transitions:', err.message);
+    if (err.response) {
+      console.error('Jira API error response:', err.response.data);
+    }
+    return { transitions: [] };
+  }
+}
+
+// Transition an issue to a new status
+async function transitionJiraIssue(issueKey, transitionId) {
+  const payload = {
+    issueKey,
+    transition: {
+      id: transitionId
+    }
+  };
+
+  console.log('Sending transition to Jira:', JSON.stringify(payload, null, 2));
+
+  return jira.issue.transitionIssue(payload)
+    .then(response => {
+      console.log('Jira transition response:', response);
+      return response;
+    })
+    .catch(error => {
+      if (error && error.response) {
+        console.error('Jira transition error:', error.response.status, error.response.data);
+      } else {
+        console.error('Jira transition error:', error);
+      }
+      throw error;
+    });
+}
+
+// Map status names to transition IDs (you'll need to discover these for your project)
+async function getTransitionIdForStatus(issueKey, targetStatus) {
+  try {
+    const transitions = await getJiraTransitions(issueKey);
+
+    // Find the transition that leads to the target status
+    const transition = transitions.transitions.find(t =>
+      t.to.name.toLowerCase() === targetStatus.toLowerCase()
+    );
+
+    if (transition) {
+      console.log(`Found transition for ${targetStatus}:`, transition);
+      return transition.id;
+    } else {
+      console.log(`No direct transition found for ${targetStatus}`);
+      console.log('Available transitions:', transitions.transitions.map(t => ({
+        id: t.id,
+        name: t.name,
+        to: t.to.name
+      })));
+      return null;
+    }
+  } catch (err) {
+    console.error('Failed to get transition ID:', err.message);
+    return null;
+  }
+}
+
 async function getJiraIssueSummary(issueKey) {
   try {
     const issue = await jira.issue.getIssue({ issueKey });
@@ -108,37 +179,43 @@ async function getJiraIssueSummary(issueKey) {
 
 async function getJiraIssueDetails(issueKey) {
   try {
-    const issue = await jira.issue.getIssue({ issueKey });
+    // Fetch the issue directly instead of using edit metadata
+    const issue = await jira.issue.getIssue({
+      issueKey,
+      fields: ['summary', 'description', 'status', 'issuetype', process.env.JIRA_ACCEPTANCE_CRITERIA_FIELD, process.env.JIRA_DESCRIPTION_FIELD]
+    });
+
+    console.log('Jira API Response for issue:', issueKey, JSON.stringify(issue, null, 2));
 
     let desc = issue.fields[process.env.JIRA_DESCRIPTION_FIELD];
-    if (typeof desc !== 'string') desc = issue.fields.description;
-
-    let acceptanceCriteria = issue.fields[process.env.JIRA_ACCEPTANCE_CRITERIA_FIELD];
-
-    const issueType = issue.fields.issuetype?.name;
-
-    if (acceptanceCriteria === null) {
-      return {
-        summary: issue.fields.summary,
-        description: desc,
-        issueType: issueType
-      };
-    } else {
-      return {
-        summary: issue.fields.summary,
-        acceptanceCriteria: acceptanceCriteria,
-        description: desc,
-        issueType: issueType
-      };
+    if (!desc || typeof desc !== 'string') {
+      desc = issue.fields.description;
     }
+    let acceptanceCriteria = issue.fields[process.env.JIRA_ACCEPTANCE_CRITERIA_FIELD];
+    // Get status from the issue fields
+    const status = issue.fields.status?.name || "To Do";
+    const issueType = issue.fields.issuetype?.name;
+    const summary = issue.fields.summary;
+
+    return {
+      summary: summary,
+      acceptanceCriteria: acceptanceCriteria,
+      description: desc,
+      issueType: issueType,
+      status: status
+    };
 
   } catch (err) {
     console.error('Failed to fetch Jira issue details:', err.message);
+    if (err.response) {
+      console.error('Jira API error response:', err.response.data);
+    }
     return {
       summary: null,
       acceptanceCriteria: null,
       description: null,
-      issueType: null
+      issueType: null,
+      status: "To Do"
     };
   }
 }
@@ -156,4 +233,51 @@ async function getJiraDescription(issueKey) {
   }
 }
 
-module.exports = { updateJiraStoryPoints, updateJiraDescription, getJiraIssueSummary, getJiraIssueDetails, updateJiraAcceptanceCriteria, getJiraDescription };
+// Update the updateJiraStatus function to use transitions
+async function updateJiraStatus(issueKey, targetStatus) {
+  try {
+    // First, get the transition ID for the target status
+    const transitionId = await getTransitionIdForStatus(issueKey, targetStatus);
+
+    if (!transitionId) {
+      throw new Error(`No transition found to status: ${targetStatus}`);
+    }
+
+    // Perform the transition
+    await transitionJiraIssue(issueKey, transitionId);
+
+    // Verify the new status
+    const updatedIssue = await jira.issue.getIssue({ issueKey });
+    return updatedIssue.fields.status.name;
+
+  } catch (err) {
+    console.error('Failed to update Jira status:', err.message);
+    throw err;
+  }
+}
+
+// Add function to get status
+async function getJiraIssueStatus(issueKey) {
+  try {
+    const issue = await jira.issue.getIssue({ issueKey });
+    return issue.fields.status?.name || "To Do";
+  } catch (err) {
+    console.error('Failed to fetch Jira issue status:', err.message);
+    return "To Do";
+  }
+}
+
+// Export ALL functions at the end
+module.exports = {
+  updateJiraStoryPoints,
+  updateJiraDescription,
+  getJiraIssueSummary,
+  getJiraIssueDetails,
+  updateJiraAcceptanceCriteria,
+  getJiraDescription,
+  updateJiraStatus,
+  getJiraIssueStatus,
+  getJiraTransitions,
+  transitionJiraIssue,
+  getTransitionIdForStatus
+};
