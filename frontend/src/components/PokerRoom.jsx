@@ -469,7 +469,8 @@ export default function PokerRoom({ name }) {
     "Code review",
     "On-Hold",
     "TEST IN PROGRESS",
-    "READY TO TEST"
+    "READY TO TEST",
+    "New"
   ];
 
   // Request initial observers when component mounts
