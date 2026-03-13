@@ -100,9 +100,10 @@ function jiraWikiToHtml(text) {
   function applyInlineFormatting(str) {
     if (!str) return "";
 
-    // Handle {*}bold{*} syntax (this is the one causing your issue)
-    str = str.replace(/\{\*\}(.*?)\{\*\}/g, '<span data-jira-bold="true">$1</span>');
+    // Normalize malformed Jira triple-brace patterns like {{{text{}}}}
+    str = str.replace(/\.\{\{\{\}(.*?)\{\}\}\}/g, '.$1');
 
+    str = str.replace(/\{\*\}(.*?)\{\*\}/g, "<strong>$1</strong>");
     // Handle *bold* syntax
     str = str.replace(/\*([^*]+)\*/g, "<strong>$1</strong>");
 
@@ -112,9 +113,20 @@ function jiraWikiToHtml(text) {
     // Handle italic
     str = str.replace(/_([^_]+)_/g, "<em>$1</em>");
 
-    // Handle code
+    // Handle strikethrough -text-
+    str = str.replace(/(^|\s)-(.+?)-(?=\s|$)/g, '$1<del>$2</del>');
+
+    // Fix malformed Jira patterns like {{{text{}}}}
+    str = str.replace(/\{\{\{(.*?)\}\}\}/g, "{{$1}}");
+
+    // Remove inner {} that sometimes appear inside {{ }}
+    str = str.replace(/\{\{(.*?)\{\}(.*?)\}\}/g, "{{$1$2}}");
+
+    // Remove standalone {} wrappers
+    str = str.replace(/\{\}(.*?)\{\}/g, "$1");
+
+    // Handle inline code
     str = str.replace(/\{\{(.*?)\}\}/g, "<code>$1</code>");
-    str = str.replace(/\{\}(.*?)\{\}/g, "<code>$1</code>");
 
     // Handle color
     str = str.replace(
@@ -134,19 +146,34 @@ function jiraWikiToHtml(text) {
   for (let line of lines) {
     line = line.trim();
 
-    // Handle code blocks
-    if (line.startsWith("{code}")) {
+    // Handle code blocks (supports {code}, {code:java}, inline closing)
+    const codeStart = line.match(/\{code(?::[^\}]*)?\}/);
+
+    if (codeStart && !inCodeBlock) {
       inCodeBlock = true;
       html += '<pre class="jira-code"><code>';
+
+      // remove the opening tag if other text exists
+      const after = line.replace(/\{code(?::[^\}]*)?\}/, '').trim();
+      if (after) html += after + '\n';
+
       continue;
     }
-    if (line.startsWith("{code}") && inCodeBlock) {
-      inCodeBlock = false;
+
+    if (inCodeBlock && line.includes("{code}")) {
+      const before = line.split("{code}")[0];
+      if (before) html += before + '\n';
+
       html += '</code></pre>';
+      inCodeBlock = false;
       continue;
     }
+
     if (inCodeBlock) {
-      html += line + '\n';
+      html += line
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;") + '\n';
       continue;
     }
 
