@@ -33,3 +33,68 @@
   cursor: pointer;
 }
 
+.join-page {
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  font-family: Arial, sans-serif;
+}
+
+.join-card {
+  background: white;
+  padding: 40px;
+  width: 340px;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+  text-align: center;
+}
+
+.join-title {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.join-subtitle {
+  margin: 8px 0 25px 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.join-form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.join-input {
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  font-size: 14px;
+  transition: border 0.2s;
+}
+
+.join-input:focus {
+  outline: none;
+  border-color: #6366f1;
+}
+
+.join-button {
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  background: #6366f1;
+  color: white;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.join-button:hover {
+  background: #4f46e5;
+  transform: translateY(-1px);
+}

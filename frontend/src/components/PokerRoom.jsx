@@ -506,14 +506,14 @@ export default function PokerRoom({ name }) {
 
     // Add this useEffect with your other useEffects
     useEffect(() => {
-      if (jiraKey && name === 'Sarthak') {
+      if (jiraKey && isManisha) {
         fetchAvailableTransitions(jiraKey);
       }
     }, [jiraKey, name]);
 
     // Add this useEffect with your other useEffects
     useEffect(() => {
-      if (jiraKey && storyStatus && name === 'Sarthak') {
+      if (jiraKey && storyStatus && isManisha) {
         // Small delay to allow Jira to process the transition
         setTimeout(() => {
           fetchAvailableTransitions(jiraKey);
@@ -625,7 +625,7 @@ export default function PokerRoom({ name }) {
   }, [name, users]);
 
   const isAdmin = name && adminName && name === adminName;
-  const isSarthak = name === "Sarthak";
+  const isManisha = name?.toLowerCase() === "manisha";
 
   // Get current user's ID
   const currentUserId = Object.keys(users).find(uid => users[uid] === name);
@@ -675,8 +675,8 @@ useEffect(() => {
     const statusClass = `status-${storyStatus.toLowerCase().replace(/\s+/g, '-')}`;
     dropdown.classList.add(statusClass);
 
-    // Disable dropdown for non-Sarthak users
-    if (name !== 'Sarthak') {
+    // Disable dropdown for non-Manisha users
+    if (!isManisha) {
       dropdown.setAttribute('disabled', 'true');
       dropdown.style.pointerEvents = 'none';
       dropdown.style.opacity = '0.6';
@@ -686,7 +686,7 @@ useEffect(() => {
       dropdown.style.opacity = '1';
     }
   }
-}, [storyStatus, name]);
+}, [storyStatus, isManisha]);
 
   const handleVote = (value) => {
     if (isCurrentUserObserver) {
@@ -713,7 +713,7 @@ useEffect(() => {
   };
 
   const fetchAvailableTransitions = async (key) => {
-    if (!key || name !== 'Sarthak') return;
+    if (!key || !isManisha) return;
 
     setIsLoadingTransitions(true);
     try {
@@ -726,7 +726,7 @@ useEffect(() => {
   };
 
   const toggleObserver = (userId) => {
-    if (!isSarthak) return;
+    if (!isManisha) return;
 
     const newObserverState = !observers[userId];
 
@@ -860,7 +860,7 @@ useEffect(() => {
           <div className="section-header">
             <FaUsers className="section-icon" />
             <h3>Participants ({Object.keys(users).length})</h3>
-            {isSarthak && (
+            {isManisha && (
               <span className="observer-hint">(Click 👁️ to toggle observer mode)</span>
             )}
           </div>
@@ -888,7 +888,7 @@ useEffect(() => {
                   </div>
                   <span className="participant-name">{userName}</span>
 
-                  {isSarthak && (
+                  {isManisha && (
                     <button
                       className={`observer-toggle-btn ${isObserver ? 'active' : ''}`}
                       onClick={() => toggleObserver(userId)}
@@ -996,7 +996,7 @@ useEffect(() => {
                       status: newStatus
                     });
                   }}
-                  disabled={isCurrentUserObserver || name !== 'Sarthak' || availableTransitions.length === 0}
+                  disabled={isCurrentUserObserver || !isManisha || availableTransitions.length === 0}
                 >
                   {availableTransitions.length > 0 ? (
                     availableTransitions.map(status => (
@@ -1043,7 +1043,7 @@ useEffect(() => {
               <div className="story-content">
                 <div className="content-header">
                   <strong>Acceptance Criteria</strong>
-                  {isSarthak && !editingAcceptance && !editingAcceptanceVisual && !isCurrentUserObserver && (
+                  {isManisha && !editingAcceptance && !editingAcceptanceVisual && !isCurrentUserObserver && (
                     <div className="edit-buttons">
                       <button
                         className="edit-btn"
@@ -1201,7 +1201,7 @@ useEffect(() => {
               <div className="story-content">
                 <div className="content-header">
                   <strong>Description</strong>
-                  {isSarthak && !editingDescription && !editingDescriptionVisual && !isCurrentUserObserver && (
+                  {isManisha && !editingDescription && !editingDescriptionVisual && !isCurrentUserObserver && (
                     <div className="edit-buttons">
                       <button
                         className="edit-btn"
@@ -1367,8 +1367,8 @@ useEffect(() => {
           </div>
         )}
 
-        {/* Story List Input (Sarthak only) */}
-        {!isCurrentUserObserver && isSarthak && storyList.length === 0 && (
+        {/* Story List Input (Manisha only) */}
+        {!isCurrentUserObserver && isManisha && storyList.length === 0 && (
           <div className="story-list-input">
             <h4>Enter Jira Issues</h4>
             <p className="input-hint">One issue key per line (e.g., PROJ-123)</p>
@@ -1421,8 +1421,8 @@ useEffect(() => {
               </div>
             )}
 
-            {/* Reveal button - ALWAYS show for Sarthak, regardless of observer mode */}
-            {isSarthak && (
+            {/* Reveal button - ALWAYS show for Manisha, regardless of observer mode */}
+            {isManisha && (
               <button
                 className="btn-reveal"
                 onClick={() => {
@@ -1601,7 +1601,7 @@ useEffect(() => {
             )}
 
             {/* Admin Controls */}
-            {isSarthak && (
+            {isManisha && (
               <div className="admin-controls">
                 <button
                   className="btn-reset"
