@@ -53,6 +53,7 @@ async function emitJiraDetails(details, socket = null) {
   }
 }
 
+
 io.on("connection", (socket) => {
 
   socket.on("join", ({ name }) => {
@@ -170,6 +171,18 @@ io.on("connection", (socket) => {
 
     emitUsersAndAdmin();
     emitObserversUpdate(); // Send updated observer list
+  });
+
+  // Add this with your other socket event handlers
+  socket.on("getJiraTransitions", async (issueKey) => {
+    try {
+      const { getJiraTransitions } = require("./jira");
+      const transitions = await getJiraTransitions(issueKey);
+      socket.emit("jiraTransitions", transitions);
+    } catch (error) {
+      console.error('Error getting transitions:', error);
+      socket.emit("jiraTransitions", { transitions: [] });
+    }
   });
 
   socket.on("fetchJiraDetails", async (jiraKey) => {

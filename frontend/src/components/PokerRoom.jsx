@@ -446,6 +446,9 @@ export default function PokerRoom({ name }) {
   const [issueType, setIssueType] = useState(null);
   const [copied, setCopied] = useState(false);
   const [storyStatus, setStoryStatus] = useState(""); // Tracks the current story status
+  // Add these with your other useState declarations
+  const [availableTransitions, setAvailableTransitions] = useState([]);
+  const [isLoadingTransitions, setIsLoadingTransitions] = useState(false);
 
   // Refs for visual editors
   const acceptanceEditorRef = useRef(null);
@@ -483,6 +486,40 @@ export default function PokerRoom({ name }) {
 
     return () => clearInterval(interval);
   }, []);
+
+    // Add this useEffect with your other useEffects
+    useEffect(() => {
+      socket.on("jiraTransitions", (data) => {
+        console.log("Received transitions:", data);
+        if (data && data.transitions) {
+          // Extract the target status names from transitions
+          const transitions = data.transitions.map(t => t.to.name);
+          setAvailableTransitions(transitions);
+        }
+        setIsLoadingTransitions(false);
+      });
+
+      return () => {
+        socket.off("jiraTransitions");
+      };
+    }, []);
+
+    // Add this useEffect with your other useEffects
+    useEffect(() => {
+      if (jiraKey && name === 'Sarthak') {
+        fetchAvailableTransitions(jiraKey);
+      }
+    }, [jiraKey, name]);
+
+    // Add this useEffect with your other useEffects
+    useEffect(() => {
+      if (jiraKey && storyStatus && name === 'Sarthak') {
+        // Small delay to allow Jira to process the transition
+        setTimeout(() => {
+          fetchAvailableTransitions(jiraKey);
+        }, 1000);
+      }
+    }, [storyStatus]);
 
   useEffect(() => {
     console.log("Setting up socket listeners for:", name);
@@ -672,6 +709,19 @@ useEffect(() => {
         setVotedUsers(prev => [...prev, currentUserId]);
       }
       socket.emit("vote", value);
+    }
+  };
+
+  const fetchAvailableTransitions = async (key) => {
+    if (!key || name !== 'Sarthak') return;
+
+    setIsLoadingTransitions(true);
+    try {
+      // Emit socket event to get transitions from backend
+      socket.emit("getJiraTransitions", key);
+    } catch (error) {
+      console.error('Error fetching transitions:', error);
+      setIsLoadingTransitions(false);
     }
   };
 
@@ -930,23 +980,33 @@ useEffect(() => {
 
             <div className="story-status-dropdown">
               <label htmlFor="story-status-select">Status: </label>
-              <select
-                id="story-status-select"
-                value={storyStatus}
-                onChange={(e) => {
-                  const newStatus = e.target.value;
-                  setStoryStatus(newStatus);
-                  socket.emit("updateStoryStatus", {
-                    jiraKey,
-                    status: newStatus
-                  });
-                }}
-                disabled={isCurrentUserObserver}
-              >
-                {storyStatuses.map(status => (
-                  <option key={status} value={status}>{status}</option>
-                ))}
-              </select>
+              {isLoadingTransitions ? (
+                <select disabled>
+                  <option>Loading transitions...</option>
+                </select>
+              ) : (
+                <select
+                  id="story-status-select"
+                  value={storyStatus}
+                  onChange={(e) => {
+                    const newStatus = e.target.value;
+                    setStoryStatus(newStatus);
+                    socket.emit("updateStoryStatus", {
+                      jiraKey,
+                      status: newStatus
+                    });
+                  }}
+                  disabled={isCurrentUserObserver || name !== 'Sarthak' || availableTransitions.length === 0}
+                >
+                  {availableTransitions.length > 0 ? (
+                    availableTransitions.map(status => (
+                      <option key={status} value={status}>{status}</option>
+                    ))
+                  ) : (
+                    <option value={storyStatus}>{storyStatus}</option>
+                  )}
+                </select>
+              )}
             </div>
 
             <div className="story-actions">
