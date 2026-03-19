@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { socket } from "../socket";
+import { useParams } from 'react-router-dom';
 import Card from "./Card.jsx";
 import {
   FaCheck, FaUsers, FaEye, FaEyeSlash, FaArrowLeft, FaArrowRight,
@@ -416,7 +417,8 @@ const calculateStats = (votes) => {
   };
 };
 
-export default function PokerRoom({ name }) {
+export default function PokerRoom({ name, onLeaveRoom }) {
+  const { roomId } = useParams(); // Get roomId from URL
   const [users, setUsers] = useState({});
   const [revealed, setRevealed] = useState(false);
   const [results, setResults] = useState(null);
@@ -449,7 +451,7 @@ export default function PokerRoom({ name }) {
   // Add these with your other useState declarations
   const [availableTransitions, setAvailableTransitions] = useState([]);
   const [isLoadingTransitions, setIsLoadingTransitions] = useState(false);
-
+    const [isLoading, setIsLoading] = useState(true);
   // Refs for visual editors
   const acceptanceEditorRef = useRef(null);
   const descriptionEditorRef = useRef(null);
@@ -458,7 +460,11 @@ export default function PokerRoom({ name }) {
   const [observers, setObservers] = useState({});
   const [observingTarget, setObservingTarget] = useState(null);
   const [userVotes, setUserVotes] = useState({});
-
+  const [isReconnecting, setIsReconnecting] = useState(true);
+  // Add this near your other useState declarations
+  const [roomName, setRoomName] = useState("");
+  // Add this with your other useState declarations
+  const [roomIdCopied, setRoomIdCopied] = useState(false);
 
   const storyStatuses = [
     "To Do",
@@ -476,61 +482,403 @@ export default function PokerRoom({ name }) {
     "New"
   ];
 
-  // Request initial observers when component mounts
+  // Load saved story data from localStorage on initial render
   useEffect(() => {
-    socket.emit("requestObservers");
+    if (roomId) {
+      const savedStoryData = localStorage.getItem(`storyData_${roomId}`);
+      if (savedStoryData) {
+        const parsed = JSON.parse(savedStoryData);
 
-    const interval = setInterval(() => {
-      socket.emit("requestObservers");
-    }, 5000);
+        // Check if data is older than 24 hours (86400000 milliseconds)
+        if (parsed.savedAt) {
+          const savedTime = new Date(parsed.savedAt).getTime();
+          const currentTime = new Date().getTime();
+          const timeDiff = currentTime - savedTime;
+          const hoursDiff = timeDiff / (1000 * 60 * 60);
 
-    return () => clearInterval(interval);
-  }, []);
+          console.log(`Data age: ${hoursDiff.toFixed(2)} hours`);
 
-    // Add this useEffect with your other useEffects
-    useEffect(() => {
-      socket.on("jiraTransitions", (data) => {
-        console.log("Received transitions:", data);
-        if (data && data.transitions) {
-          // Extract the target status names from transitions
-          const transitions = data.transitions.map(t => t.to.name);
-          setAvailableTransitions(transitions);
+          if (hoursDiff > 24) {
+            console.log('Data is older than 24 hours, clearing...');
+            // Clear stale data
+            localStorage.removeItem(`storyData_${roomId}`);
+            localStorage.removeItem(`users_${roomId}`);
+            localStorage.removeItem(`observers_${roomId}`);
+            localStorage.removeItem(`admin_${roomId}`);
+
+            // Reset all states
+            setJiraKey("");
+            setIssueTitle(null);
+            setAcceptanceCriteria(null);
+            setDescription(null);
+            setIssueType(null);
+            setStoryStatus("");
+            setStoryList([]);
+            setCurrentStoryIndex(0);
+            setStoryListInput("");
+            setRevealed(false);
+            setFinalPoint(null);
+            setSelectedCard(null);
+            setVotedUsers([]);
+            setUserVotes({});
+            setUsers({});
+            setObservers({});
+
+            setIsLoading(false);
+            return; // Exit early, don't load stale data
+          }
         }
-        setIsLoadingTransitions(false);
+
+        // Only load data if it's not stale
+        setJiraKey(parsed.jiraKey || "");
+        setIssueTitle(parsed.issueTitle || null);
+        setAcceptanceCriteria(parsed.acceptanceCriteria || null);
+        setDescription(parsed.description || null);
+        setIssueType(parsed.issueType || null);
+        setStoryStatus(parsed.storyStatus || "");
+        setStoryList(parsed.storyList || []);
+        setCurrentStoryIndex(parsed.currentStoryIndex || 0);
+        setStoryListInput(parsed.storyListInput || "");
+
+        // Restore voting state
+        setRevealed(parsed.revealed || false);
+        setFinalPoint(parsed.finalPoint || null);
+        setSelectedCard(parsed.selectedCard || null);
+        setVotedUsers(parsed.votedUsers || []);
+        setUserVotes(parsed.userVotes || {});
+
+        // If there was a final point, we might want to show results
+        if (parsed.results) {
+                setResults(parsed.results);
+              } else if (parsed.revealed && parsed.userVotes && parsed.users) {
+                // For backward compatibility
+                setResults({
+                  votes: parsed.userVotes || {},
+                  users: parsed.users || {}
+                });
+              }
+            }
+
+      // Load saved users from localStorage
+      const savedUsers = localStorage.getItem(`users_${roomId}`);
+      if (savedUsers) {
+        const parsedUsers = JSON.parse(savedUsers);
+        // Check if users data has timestamp (if you saved it with timestamp)
+        if (parsedUsers.savedAt) {
+          const savedTime = new Date(parsedUsers.savedAt).getTime();
+          const currentTime = new Date().getTime();
+          const hoursDiff = (currentTime - savedTime) / (1000 * 60 * 60);
+
+          if (hoursDiff <= 24) {
+            setUsers(parsedUsers);
+          } else {
+            localStorage.removeItem(`users_${roomId}`);
+          }
+        } else {
+          setUsers(parsedUsers);
+        }
+      }
+
+      // Load saved observers from localStorage
+      const savedObservers = localStorage.getItem(`observers_${roomId}`);
+      if (savedObservers) {
+        const parsedObservers = JSON.parse(savedObservers);
+        // Check if observers data has timestamp
+        if (parsedObservers.savedAt) {
+          const savedTime = new Date(parsedObservers.savedAt).getTime();
+          const currentTime = new Date().getTime();
+          const hoursDiff = (currentTime - savedTime) / (1000 * 60 * 60);
+
+          if (hoursDiff <= 24) {
+            setObservers(parsedObservers);
+          } else {
+            localStorage.removeItem(`observers_${roomId}`);
+          }
+        } else {
+          setObservers(parsedObservers);
+        }
+      }
+
+      const hasData = savedStoryData || savedUsers || savedObservers;
+      setTimeout(() => {
+        setIsLoading(false);
+      }, 100);
+    }
+  }, [roomId]);
+
+  // Try to recover admin from localStorage
+  useEffect(() => {
+    if (roomId) {
+      // Try to get admin from localStorage as fallback
+      const savedAdmin = localStorage.getItem(`admin_${roomId}`);
+      if (savedAdmin && !adminName) {
+        setAdminName(savedAdmin);
+      }
+    }
+  }, [roomId]);
+
+  // Request current admin when component mounts
+  useEffect(() => {
+    if (roomId) {
+      // Request current admin when component mounts
+      socket.emit("getCurrentAdmin", { roomId });
+    }
+  }, [roomId]);
+
+useEffect(() => {
+  if (roomId && name) {
+    // Request current story data
+    socket.emit("requestCurrentStory", { roomId });
+  }
+}, [roomId, name]);
+
+  // Save story data to localStorage whenever it changes
+  // Save story data to localStorage whenever it changes
+  useEffect(() => {
+    if (roomId) {
+      const timestamp = new Date().toISOString();
+
+      const storyData = {
+        jiraKey,
+        issueTitle,
+        acceptanceCriteria,
+        description,
+        issueType,
+        storyStatus,
+        storyList,
+        currentStoryIndex,
+        storyListInput,
+        revealed,
+        finalPoint,
+        selectedCard,
+        votedUsers,
+        userVotes,
+        users,
+        results,
+        savedAt: timestamp  // Add timestamp here
+      };
+      localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
+
+      // Also save users separately with timestamp
+      const usersWithTimestamp = {
+        ...users,
+        savedAt: timestamp
+      };
+      localStorage.setItem(`users_${roomId}`, JSON.stringify(usersWithTimestamp));
+
+      // Save observers with timestamp
+      const observersWithTimestamp = {
+        ...observers,
+        savedAt: timestamp
+      };
+      localStorage.setItem(`observers_${roomId}`, JSON.stringify(observersWithTimestamp));
+
+      console.log(`Data saved at ${timestamp}`);
+    }
+  }, [roomId, jiraKey, issueTitle, acceptanceCriteria, description, issueType,
+      storyStatus, storyList, currentStoryIndex, storyListInput, revealed,
+      finalPoint, selectedCard, votedUsers, userVotes, users, observers, results]);
+
+  // Update this useEffect to handle reconnection better
+  useEffect(() => {
+    if (roomId) {
+      console.log("Requesting initial data for room:", roomId);
+
+      // Request users and observers
+      socket.emit("getUsers", { roomId });
+      socket.emit("requestObservers", { roomId });
+
+      // Also request room info
+      socket.emit("getRoomInfo", { roomId });
+
+      // Also try to join if not already in room
+      socket.emit("join-room", {
+        userName: name,
+        roomId: roomId
       });
 
-      return () => {
-        socket.off("jiraTransitions");
-      };
-    }, []);
-
-    // Add this useEffect with your other useEffects
-    useEffect(() => {
-      if (jiraKey && isManisha) {
-        fetchAvailableTransitions(jiraKey);
+      // If we have a jiraKey from localStorage, fetch fresh details
+      if (jiraKey) {
+        socket.emit("fetchJiraDetails", { roomId, jiraKey });
       }
-    }, [jiraKey, name]);
+    }
+  }, [roomId, name]);
 
-    // Add this useEffect with your other useEffects
-    useEffect(() => {
-      if (jiraKey && storyStatus && isManisha) {
-        // Small delay to allow Jira to process the transition
-        setTimeout(() => {
-          fetchAvailableTransitions(jiraKey);
-        }, 1000);
+  useEffect(() => {
+    console.log("Socket connected?", socket.connected);
+
+    const onConnect = () => {
+      console.log("Socket connected!");
+      if (roomId) {
+        socket.emit("getUsers", { roomId });
+        socket.emit("requestObservers", { roomId });
+        socket.emit("getCurrentAdmin", { roomId }); // ADD THIS LINE
+
+        // Re-fetch Jira details on reconnect if we have a jiraKey
+        if (jiraKey) {
+          socket.emit("fetchJiraDetails", { roomId, jiraKey });
+        }
       }
-    }, [storyStatus]);
+    };
+
+    socket.on("connect", onConnect);
+
+    return () => {
+      socket.off("connect", onConnect);
+    };
+  }, [roomId, jiraKey]);
+
+  // Add loading state management - UPDATED
+  useEffect(() => {
+    if (!roomId) return;
+
+    console.log("Checking if user is in room...", { users, name });
+
+    // Function to check if current user is in the users list
+    const checkUserInRoom = () => {
+      const isUserInRoom = Object.values(users).includes(name);
+      console.log("Is user in room?", isUserInRoom, "Users:", Object.values(users));
+
+      if (isUserInRoom) {
+        console.log("User found in room, stopping reconnection message");
+        setIsReconnecting(false);
+      } else {
+        console.log("User not in room yet, trying to re-join");
+        // Try to re-join if not in room
+        socket.emit("join-room", {
+          userName: name,
+          roomId: roomId
+        });
+      }
+    };
+
+    // Check immediately
+    checkUserInRoom();
+
+    // Also check whenever users change
+    const handleUsersUpdate = () => {
+      checkUserInRoom();
+    };
+
+    socket.on("users", handleUsersUpdate);
+
+    // Set a timeout to force stop reconnecting if we have users but somehow still reconnecting
+    const timeout = setTimeout(() => {
+      if (Object.keys(users).length > 0 && isReconnecting) {
+        console.log("Force stopping reconnection - we have users");
+        setIsReconnecting(false);
+      }
+    }, 2000);
+
+    return () => {
+      socket.off("users", handleUsersUpdate);
+      clearTimeout(timeout);
+    };
+  }, [roomId, name, users]); // Add users as dependency
+
+  // Add this near your other useEffects in PokerRoom.jsx
+  useEffect(() => {
+    if (roomId) {
+      // Request current users in the room
+      socket.emit("getUsers", { roomId });
+
+      // Also request observers
+      socket.emit("requestObservers", { roomId });
+    }
+  }, [roomId]);
 
   useEffect(() => {
     console.log("Setting up socket listeners for:", name);
 
     socket.on("users", (data) => {
+      console.log("Received users update:", data);
+    // If we're observing someone who left, clear observation
+      if (observingTarget && !Object.keys(data).includes(observingTarget)) {
+        console.log("Observed user left, clearing observation");
+        setObservingTarget(null);
+      }
+      // Check if the current user is still in the room
+      const currentUserStillInRoom = Object.values(data).includes(name);
+
       setUsers(data);
+            // Add this to save users to localStorage
+              if (roomId) {
+                const usersWithTimestamp = {
+                  ...data,
+                  savedAt: new Date().toISOString()
+                };
+                localStorage.setItem(`users_${roomId}`, JSON.stringify(usersWithTimestamp));
+              }
+      // If current user is no longer in the room, they were kicked or disconnected
+      if (!currentUserStillInRoom && !isReconnecting) {
+        console.log("Current user no longer in room, redirecting to home");
+        setTimeout(() => {
+          localStorage.removeItem("pokerUserName");
+          if (roomId) {
+            localStorage.removeItem(`admin_${roomId}`);
+            localStorage.removeItem(`storyData_${roomId}`);
+          }
+          window.location.href = '/';
+        }, 1000);
+      }
+    });
+
+    // ADD THIS NEW LISTENER FOR CURRENT ADMIN
+    socket.on("currentAdmin", (data) => {
+      console.log("Received current admin:", data);
+      setAdminName(data.adminName);
+      // Store admin in localStorage as backup
+      if (roomId && data.adminName) {
+        localStorage.setItem(`admin_${roomId}`, data.adminName);
+      }
+    });
+
+    // ADD THIS NEW LISTENER FOR ROOM INFO
+    socket.on("roomInfo", (data) => {
+      console.log("Received room info:", data);
+      if (data && data.roomName) {
+        setRoomName(data.roomName);
+      }
+    });
+
+    socket.on("observersUpdate", (observerData) => {
+      console.log("Received observers update:", observerData);
+      setObservers(observerData);
+        // Add this to save observers to localStorage
+          if (roomId) {
+            const observersWithTimestamp = {
+              ...observerData,
+              savedAt: new Date().toISOString()
+            };
+            localStorage.setItem(`observers_${roomId}`, JSON.stringify(observersWithTimestamp));
+          }
+      // Find current user ID after users state is updated
+      const currentUserId = Object.keys(users).find(uid => users[uid] === name);
+      if (currentUserId && observerData[currentUserId]) {
+        console.log("Current user is now an observer, clearing vote");
+        setSelectedCard(null);
+        socket.emit("vote", { roomId, point: null });
+      }
+    });
+
+    socket.on("room-joined", (data) => {
+      console.log("Room joined confirmation:", data);
+      // Optionally do something with this data
     });
 
     socket.on("reveal", (data) => {
       setResults(data);
       setRevealed(true);
+       // Save to localStorage
+        if (roomId) {
+          const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
+          storyData.revealed = true;
+          storyData.results = data;
+          storyData.votedUsers = Object.keys(data.votes || {});
+          storyData.userVotes = data.votes || {};
+          storyData.savedAt = new Date().toISOString();
+          localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
+        }
     });
 
     socket.on("storyStatusUpdate", ({ jiraKey: key, status }) => {
@@ -551,14 +899,13 @@ export default function PokerRoom({ name }) {
       }
     });
 
-// Add error handler
-  socket.on("statusUpdateError", ({ error }) => {
-    alert(`Failed to update status: ${error}`);
-  });
+    socket.on("statusUpdateError", ({ error }) => {
+      alert(`Failed to update status: ${error}`);
+    });
 
     socket.on("jiraDetails", (details) => {
-        console.log("Received jiraDetails:", details);
-        console.log("Status from backend:", details.status);
+      console.log("Received jiraDetails:", details);
+      console.log("Status from backend:", details.status);
       setIssueTitle(details.summary);
       setAcceptanceCriteria(details.acceptanceCriteria);
       setDescription(details.description);
@@ -579,11 +926,28 @@ export default function PokerRoom({ name }) {
       setSelectedCard(null);
       setObservers({});
       setObservingTarget(null);
+      // Save reset state to localStorage
+        if (roomId) {
+          const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
+          storyData.revealed = false;
+          storyData.results = null;
+          storyData.finalPoint = null;
+          storyData.votedUsers = [];
+          storyData.userVotes = {};
+          storyData.savedAt = new Date().toISOString();
+          localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
+        }
     });
 
     socket.on("admin", (data) => {
-      console.log("Admin set:", data);
-      setAdminName(data);
+      console.log("Admin set/updated:", data);
+      // Handle both string and object responses
+      const adminValue = typeof data === 'object' ? data.adminName : data;
+      setAdminName(adminValue);
+      // Store admin in localStorage as backup
+      if (roomId && adminValue) {
+        localStorage.setItem(`admin_${roomId}`, adminValue);
+      }
     });
 
     socket.on("voteUpdate", (data) => {
@@ -591,8 +955,26 @@ export default function PokerRoom({ name }) {
       if (data && data.votes) {
         setVotedUsers(Object.keys(data.votes));
         setUserVotes(data.votes);
+
+        // Only update results if revealed, otherwise preserve existing results
+        if (revealed) {
+          setResults(data);
+        }
+        // Don't set results to null when not revealed - this preserves loaded results
+
+        // Save votes to localStorage
+        if (roomId) {
+          const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
+          storyData.votedUsers = Object.keys(data.votes);
+          storyData.userVotes = data.votes;
+          if (revealed) {
+            storyData.results = data;
+          }
+          // If not revealed, preserve the existing results in localStorage
+          storyData.savedAt = new Date().toISOString();
+          localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
+        }
       }
-      setResults(data);
     });
 
     socket.on("observersUpdate", (observerData) => {
@@ -603,11 +985,18 @@ export default function PokerRoom({ name }) {
       if (currentUserId && observerData[currentUserId]) {
         console.log("Current user is now an observer, clearing vote");
         setSelectedCard(null);
-        socket.emit("vote", null);
+        socket.emit("vote", { roomId, point: null });
       }
     });
 
-
+    socket.on("jiraTransitions", (data) => {
+      console.log("Received transitions:", data);
+      if (data && data.transitions) {
+        const transitions = data.transitions.map(t => t.to.name);
+        setAvailableTransitions(transitions);
+      }
+      setIsLoadingTransitions(false);
+    });
 
     return () => {
       console.log("Cleaning up socket listeners");
@@ -619,13 +1008,17 @@ export default function PokerRoom({ name }) {
       socket.off("statusUpdateError");
       socket.off("reset");
       socket.off("admin");
+      socket.off("observersUpdate");
+      socket.off("room-joined");
       socket.off("voteUpdate");
       socket.off("observersUpdate");
+      socket.off("roomInfo");
+      socket.off("jiraTransitions");
+      socket.off("currentAdmin"); // ADD THIS LINE
     };
-  }, [name, users]);
+  }, [name, users, roomId, jiraKey]);
 
   const isAdmin = name && adminName && name === adminName;
-  const isManisha = name?.toLowerCase() === "manisha";
 
   // Get current user's ID
   const currentUserId = Object.keys(users).find(uid => users[uid] === name);
@@ -638,10 +1031,10 @@ export default function PokerRoom({ name }) {
   }, [storyList, currentStoryIndex]);
 
   useEffect(() => {
-    if (jiraKey) {
-      socket.emit("fetchJiraDetails", jiraKey);
+    if (jiraKey && roomId) {
+      socket.emit("fetchJiraDetails", { roomId, jiraKey });
     }
-  }, [jiraKey]);
+  }, [jiraKey, roomId]);
 
   useEffect(() => {
     setSelectedCard(null);
@@ -661,32 +1054,77 @@ export default function PokerRoom({ name }) {
     }
   }, [editingDescriptionVisual, description]);
 
-// Add this useEffect to update the dropdown container class based on status
-useEffect(() => {
-  const dropdown = document.querySelector('.story-status-dropdown');
-  if (dropdown) {
-    // Remove all status classes
-    dropdown.classList.remove(
-      'status-todo', 'status-in-progress', 'status-in-review',
-      'status-done', 'status-closed', 'status-ready', 'status-blocked'
-    );
+  // Add this useEffect to update the dropdown container class based on status
+  useEffect(() => {
+    const dropdown = document.querySelector('.story-status-dropdown');
+    if (dropdown) {
+      // Remove all status classes
+      dropdown.classList.remove(
+        'status-todo', 'status-in-progress', 'status-in-review',
+        'status-done', 'status-closed', 'status-ready', 'status-blocked'
+      );
 
-    // Add the current status class (convert to kebab-case)
-    const statusClass = `status-${storyStatus.toLowerCase().replace(/\s+/g, '-')}`;
-    dropdown.classList.add(statusClass);
+      // Add the current status class (convert to kebab-case)
+      const statusClass = `status-${storyStatus.toLowerCase().replace(/\s+/g, '-')}`;
+      dropdown.classList.add(statusClass);
 
-    // Disable dropdown for non-Manisha users
-    if (!isManisha) {
-      dropdown.setAttribute('disabled', 'true');
-      dropdown.style.pointerEvents = 'none';
-      dropdown.style.opacity = '0.6';
-    } else {
-      dropdown.removeAttribute('disabled');
-      dropdown.style.pointerEvents = 'auto';
-      dropdown.style.opacity = '1';
+      // Disable dropdown for non-admin users
+      if (!isAdmin) {
+        dropdown.setAttribute('disabled', 'true');
+        dropdown.style.pointerEvents = 'none';
+        dropdown.style.opacity = '0.6';
+      } else {
+        dropdown.removeAttribute('disabled');
+        dropdown.style.pointerEvents = 'auto';
+        dropdown.style.opacity = '1';
+      }
     }
-  }
-}, [storyStatus, isManisha]);
+  }, [storyStatus, isAdmin]);
+
+  // Add this near your other useEffects - REPLACE the existing reconnection useEffect
+  useEffect(() => {
+    if (!roomId || !name) return;
+
+    console.log("Setting up reconnection for room:", roomId, "name:", name);
+
+    const handleReconnect = () => {
+      console.log("Socket reconnected, re-joining room:", roomId);
+      // Re-join the room
+      socket.emit("join-room", {
+        userName: name,
+        roomId: roomId
+      });
+
+      // Request users after joining
+      setTimeout(() => {
+        socket.emit("getUsers", { roomId });
+        socket.emit("requestObservers", { roomId });
+        socket.emit("getCurrentAdmin", { roomId }); // ADD THIS LINE
+
+        // Re-fetch Jira details if we have a jiraKey
+        if (jiraKey) {
+          socket.emit("fetchJiraDetails", { roomId, jiraKey });
+        }
+      }, 500);
+    };
+
+    // If socket is already connected, join immediately
+    if (socket.connected) {
+      console.log("Socket already connected, joining immediately");
+      handleReconnect();
+    } else {
+      console.log("Socket not connected, waiting for connection");
+    }
+
+    // Listen for connection and reconnection events
+    socket.on("connect", handleReconnect);
+    socket.on("reconnect", handleReconnect);
+
+    return () => {
+      socket.off("connect", handleReconnect);
+      socket.off("reconnect", handleReconnect);
+    };
+  }, [roomId, name, jiraKey]); // Add jiraKey as dependency
 
   const handleVote = (value) => {
     if (isCurrentUserObserver) {
@@ -702,31 +1140,36 @@ useEffect(() => {
     if (selectedCard === value) {
       setSelectedCard(null);
       setVotedUsers(prev => prev.filter(uid => uid !== currentUserId));
-      socket.emit("vote", null);
+      socket.emit("vote", { roomId, point: null });
     } else {
       setSelectedCard(value);
       if (!votedUsers.includes(currentUserId)) {
         setVotedUsers(prev => [...prev, currentUserId]);
       }
-      socket.emit("vote", value);
+      socket.emit("vote", { roomId, point: value });
     }
+// Save to localStorage immediately
+  if (roomId) {
+    const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
+    storyData.selectedCard = value === selectedCard ? null : value;
+    storyData.votedUsers = value === selectedCard
+      ? votedUsers.filter(uid => uid !== currentUserId)
+      : [...votedUsers, currentUserId];
+    storyData.savedAt = new Date().toISOString();
+    localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
+  }
   };
 
-  const fetchAvailableTransitions = async (key) => {
-    if (!key || !isManisha) return;
+  const fetchAvailableTransitions = (key) => {
+    if (!key || !isAdmin || !roomId) return;
 
+    console.log(`Fetching transitions for ${key}`);
     setIsLoadingTransitions(true);
-    try {
-      // Emit socket event to get transitions from backend
-      socket.emit("getJiraTransitions", key);
-    } catch (error) {
-      console.error('Error fetching transitions:', error);
-      setIsLoadingTransitions(false);
-    }
+    socket.emit("getJiraTransitions", { roomId, issueKey: key });
   };
 
   const toggleObserver = (userId) => {
-    if (!isManisha) return;
+    if (!isAdmin) return;
 
     const newObserverState = !observers[userId];
 
@@ -737,10 +1180,10 @@ useEffect(() => {
 
     if (userId === currentUserId && newObserverState) {
       setSelectedCard(null);
-      socket.emit("vote", null);
+      socket.emit("vote", { roomId, point: null });
     }
 
-    socket.emit("toggleObserver", userId);
+    socket.emit("toggleObserver", { roomId, userId });
   };
 
   const observeUser = (userId) => {
@@ -816,26 +1259,173 @@ useEffect(() => {
   // Calculate stats when results are revealed
   const stats = results && revealed ? calculateStats(results.votes) : null;
 
+  const handleReveal = () => {
+    console.log("Reveal button clicked");
+    socket.emit("reveal", { roomId });
+    // Save to localStorage
+
+  };
+
+  const handleReset = () => {
+    setRevealed(false);
+    setResults(null);
+    setSelectedCard(null);
+    socket.emit("reset", { roomId });
+
+  };
+
+  const handleFinalize = () => {
+    socket.emit("finalize", {
+      roomId,
+      data: { point: customPoint, jiraKey }
+    });
+    setFinalPoint(customPoint);
+
+      // Save to localStorage
+      if (roomId) {
+        const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
+        storyData.finalPoint = customPoint;
+        storyData.savedAt = new Date().toISOString();
+        localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
+      }
+  };
+
+  const handleSaveAcceptance = () => {
+    socket.emit("updateAcceptanceCriteria", {
+      roomId,
+      jiraKey,
+      acceptanceCriteria: editAcceptanceValue
+    });
+    setEditingAcceptance(false);
+  };
+
+  const handleSaveDescription = () => {
+    socket.emit("updateDescription", {
+      roomId,
+      jiraKey,
+      description: editDescriptionValue
+    });
+    setEditingDescription(false);
+  };
+
+  const handleSaveVisualAcceptance = () => {
+    const html = acceptanceEditorRef.current.innerHTML;
+    const wikiContent = htmlToJiraWiki(html);
+    socket.emit("updateAcceptanceCriteria", {
+      roomId,
+      jiraKey,
+      acceptanceCriteria: wikiContent
+    });
+    setEditingAcceptanceVisual(false);
+  };
+
+  const handleSaveVisualDescription = () => {
+    const html = descriptionEditorRef.current.innerHTML;
+    const wikiContent = htmlToJiraWiki(html);
+    socket.emit("updateDescription", {
+      roomId,
+      jiraKey,
+      description: wikiContent
+    });
+    setEditingDescriptionVisual(false);
+  };
+
+  const handleStatusChange = (e) => {
+    const newStatus = e.target.value;
+    setStoryStatus(newStatus);
+    if (jiraKey) {
+      socket.emit("updateStoryStatus", {
+        roomId,
+        jiraKey,
+        status: newStatus
+      });
+    }
+  };
+
+  // Add this function before handleLeaveRoom
+  const copyRoomIdToClipboard = () => {
+    navigator.clipboard.writeText(roomId);
+    setRoomIdCopied(true);
+    setTimeout(() => setRoomIdCopied(false), 2000);
+  };
+
+  const handleLeaveRoom = () => {
+      // Clear name from localStorage
+      localStorage.removeItem("pokerUserName");
+      // Clear admin data for this room
+      if (roomId) {
+        localStorage.removeItem(`admin_${roomId}`);
+      }
+      // Call the onLeaveRoom callback to update App state
+      if (onLeaveRoom) {
+        onLeaveRoom();
+      }
+      // Navigate to home page
+      window.location.href = '/';
+    };
+
+  // Clear story data when unmounting (optional - remove if you want to keep it)
+  // useEffect(() => {
+  //   return () => {
+  //     if (roomId) {
+  //       localStorage.removeItem(`storyData_${roomId}`);
+  //     }
+  //   };
+  // }, [roomId]);
+
   return (
     <div className="poker-room">
       <div className="poker-container">
         {/* Header */}
         <div className="room-header">
-          <h1 className="room-title">Planning Poker</h1>
-          {isCurrentUserObserver && (
-            <div className="observer-badge">
-              <FaUserSecret className="observer-badge-icon" />
-              <span>Observer Mode</span>
-            </div>
-          )}
-          {jiraKey && (
-            <div className="story-badge" onClick={() => copyToClipboard(jiraKey)} title="Click to copy">
-              <span className="story-key">{jiraKey}</span>
-              {copied ? <FaCopy className="copy-icon copied" /> : <FaRegCopy className="copy-icon" />}
-            </div>
-          )}
+          <div className="room-title-container">
+            <h1 className="room-title">
+              {roomName ? `${roomName} - ` : ''}
+              <span className="room-id-wrapper">
+                Room: {roomId}
+                <button
+                  className="copy-room-id-btn"
+                  onClick={copyRoomIdToClipboard}
+                  title="Copy room ID to clipboard"
+                >
+                  {roomIdCopied ? <FaCopy className="copy-icon copied" /> : <FaRegCopy className="copy-icon" />}
+                </button>
+              </span>
+            </h1>
+            {roomName && <span className="room-name-badge">{roomName}</span>}
+          </div>
+          <div className="header-actions">
+            {isCurrentUserObserver && (
+              <div className="observer-badge">
+                <FaUserSecret className="observer-badge-icon" />
+                <span>Observer Mode</span>
+              </div>
+            )}
+            {jiraKey && (
+              <div className="story-badge" onClick={() => copyToClipboard(jiraKey)} title="Click to copy Jira key">
+                <span className="story-key">{jiraKey}</span>
+                {copied ? <FaCopy className="copy-icon copied" /> : <FaRegCopy className="copy-icon" />}
+              </div>
+            )}
+            <button className="leave-room-btn" onClick={handleLeaveRoom} title="Leave Room">
+              🚪 Leave
+            </button>
+          </div>
         </div>
-
+        {/* 👇 ADD THE RECONNECTING MESSAGE HERE - right after header and before Observing Target Indicator */}
+        {isReconnecting && (
+          <div className="reconnecting-message">
+            <div className="spinner"></div>
+            <p>Reconnecting to room...</p>
+          </div>
+        )}
+             {/* Loading Indicator */}
+                    {isLoading && (
+                      <div className="loading-indicator">
+                        <div className="spinner"></div>
+                        <p>Loading your session...</p>
+                      </div>
+                    )}
         {/* Observing Target Indicator */}
         {observingTarget && (
           <div className="observing-indicator">
@@ -860,12 +1450,13 @@ useEffect(() => {
           <div className="section-header">
             <FaUsers className="section-icon" />
             <h3>Participants ({Object.keys(users).length})</h3>
-            {isManisha && (
+            {isAdmin && (
               <span className="observer-hint">(Click 👁️ to toggle observer mode)</span>
             )}
           </div>
           <div className="participants-grid">
             {Object.entries(users).map(([userId, userName]) => {
+                if (!userId || !userName) return null;
               const hasVoted = !revealed && votedUsers.includes(userId);
               const backgroundColor = getAvatarColor(userName);
               const isObserver = observers[userId];
@@ -887,8 +1478,11 @@ useEffect(() => {
                     {isObserver && <FaUserSecret className="observer-icon" />}
                   </div>
                   <span className="participant-name">{userName}</span>
+                  {userName === adminName && (
+                    <span className="admin-crown" title="Room Admin">👑</span>
+                  )}
 
-                  {isManisha && (
+                  {isAdmin && (
                     <button
                       className={`observer-toggle-btn ${isObserver ? 'active' : ''}`}
                       onClick={() => toggleObserver(userId)}
@@ -938,7 +1532,7 @@ useEffect(() => {
                         setEditingAcceptanceVisual(false);
                         setEditingDescription(false);
                         setEditingDescriptionVisual(false);
-                        socket.emit("reset");
+                        socket.emit("reset", { roomId });
                       }
                     }}
                     disabled={currentStoryIndex === 0}
@@ -965,7 +1559,7 @@ useEffect(() => {
                         setEditingAcceptanceVisual(false);
                         setEditingDescription(false);
                         setEditingDescriptionVisual(false);
-                        socket.emit("reset");
+                        socket.emit("reset", { roomId });
                       }
                     }}
                     disabled={currentStoryIndex >= storyList.length - 1}
@@ -988,15 +1582,14 @@ useEffect(() => {
                 <select
                   id="story-status-select"
                   value={storyStatus}
-                  onChange={(e) => {
-                    const newStatus = e.target.value;
-                    setStoryStatus(newStatus);
-                    socket.emit("updateStoryStatus", {
-                      jiraKey,
-                      status: newStatus
-                    });
-                  }}
-                  disabled={isCurrentUserObserver || !isManisha || availableTransitions.length === 0}
+                  onChange={handleStatusChange}
+                  onClick={() => {
+                          // Fetch transitions when dropdown is clicked
+                          if (jiraKey && isAdmin) {
+                            fetchAvailableTransitions(jiraKey);
+                          }
+                        }}
+                  disabled={isCurrentUserObserver || !isAdmin }
                 >
                   {availableTransitions.length > 0 ? (
                     availableTransitions.map(status => (
@@ -1043,7 +1636,7 @@ useEffect(() => {
               <div className="story-content">
                 <div className="content-header">
                   <strong>Acceptance Criteria</strong>
-                  {isManisha && !editingAcceptance && !editingAcceptanceVisual && !isCurrentUserObserver && (
+                  {isAdmin && !editingAcceptance && !editingAcceptanceVisual && !isCurrentUserObserver && (
                     <div className="edit-buttons">
                       <button
                         className="edit-btn"
@@ -1087,13 +1680,7 @@ useEffect(() => {
                       placeholder="Enter Jira wiki markup..."
                     />
                     <div className="edit-actions">
-                      <button className="btn-save" onClick={() => {
-                        socket.emit("updateAcceptanceCriteria", {
-                          jiraKey,
-                          acceptanceCriteria: editAcceptanceValue
-                        });
-                        setEditingAcceptance(false);
-                      }}>Save</button>
+                      <button className="btn-save" onClick={handleSaveAcceptance}>Save</button>
                       <button className="btn-cancel" onClick={() => setEditingAcceptance(false)}>Cancel</button>
                     </div>
                   </div>
@@ -1181,15 +1768,7 @@ useEffect(() => {
                       }}
                     />
                     <div className="edit-actions">
-                      <button className="btn-save" onClick={() => {
-                        const html = acceptanceEditorRef.current.innerHTML;
-                        const wikiContent = htmlToJiraWiki(html);
-                        socket.emit("updateAcceptanceCriteria", {
-                          jiraKey,
-                          acceptanceCriteria: wikiContent
-                        });
-                        setEditingAcceptanceVisual(false);
-                      }}>Save</button>
+                      <button className="btn-save" onClick={handleSaveVisualAcceptance}>Save</button>
                       <button className="btn-cancel" onClick={() => setEditingAcceptanceVisual(false)}>Cancel</button>
                     </div>
                   </div>
@@ -1201,7 +1780,7 @@ useEffect(() => {
               <div className="story-content">
                 <div className="content-header">
                   <strong>Description</strong>
-                  {isManisha && !editingDescription && !editingDescriptionVisual && !isCurrentUserObserver && (
+                  {isAdmin && !editingDescription && !editingDescriptionVisual && !isCurrentUserObserver && (
                     <div className="edit-buttons">
                       <button
                         className="edit-btn"
@@ -1245,13 +1824,7 @@ useEffect(() => {
                       placeholder="Enter Jira wiki markup..."
                     />
                     <div className="edit-actions">
-                      <button className="btn-save" onClick={() => {
-                        socket.emit("updateDescription", {
-                          jiraKey,
-                          description: editDescriptionValue
-                        });
-                        setEditingDescription(false);
-                      }}>Save</button>
+                      <button className="btn-save" onClick={handleSaveDescription}>Save</button>
                       <button className="btn-cancel" onClick={() => setEditingDescription(false)}>Cancel</button>
                     </div>
                   </div>
@@ -1324,14 +1897,14 @@ useEffect(() => {
                       contentEditable={true}
                       dangerouslySetInnerHTML={{ __html: editDescriptionVisualValue }}
                       onInput={(e) => {
-                           const el = e.currentTarget;
-                           const savedPos = saveCursorPosition(el);
-                           const html = el.innerHTML;
-                           setEditDescriptionVisualValue(html);
-                           requestAnimationFrame(() => {
-                             if (el && savedPos) restoreCursorPosition(el, savedPos);
-                           });
-                         }}
+                        const el = e.currentTarget;
+                        const savedPos = saveCursorPosition(el);
+                        const html = el.innerHTML;
+                        setEditDescriptionVisualValue(html);
+                        requestAnimationFrame(() => {
+                          if (el && savedPos) restoreCursorPosition(el, savedPos);
+                        });
+                      }}
                       onBlur={(e) => setEditDescriptionVisualValue(e.currentTarget.innerHTML)}
                       style={{
                         border: '1px solid #ddd',
@@ -1349,15 +1922,7 @@ useEffect(() => {
                       suppressContentEditableWarning={true}
                     />
                     <div className="edit-actions">
-                      <button className="btn-save" onClick={() => {
-                        const html = descriptionEditorRef.current.innerHTML;
-                        const wikiContent = htmlToJiraWiki(html);
-                        socket.emit("updateDescription", {
-                          jiraKey,
-                          description: wikiContent
-                        });
-                        setEditingDescriptionVisual(false);
-                      }}>Save</button>
+                      <button className="btn-save" onClick={handleSaveVisualDescription}>Save</button>
                       <button className="btn-cancel" onClick={() => setEditingDescriptionVisual(false)}>Cancel</button>
                     </div>
                   </div>
@@ -1367,8 +1932,10 @@ useEffect(() => {
           </div>
         )}
 
-        {/* Story List Input (Manisha only) */}
-        {!isCurrentUserObserver && isManisha && storyList.length === 0 && (
+        {/* Story List Input (Admin only) */}
+        {!isLoading && !isCurrentUserObserver && isAdmin && storyList.length === 0 && !jiraKey && !issueTitle &&
+                                                                                                   !acceptanceCriteria &&
+                                                                                                   !description && (
           <div className="story-list-input">
             <h4>Enter Jira Issues</h4>
             <p className="input-hint">One issue key per line (e.g., PROJ-123)</p>
@@ -1421,14 +1988,11 @@ useEffect(() => {
               </div>
             )}
 
-            {/* Reveal button - ALWAYS show for Manisha, regardless of observer mode */}
-            {isManisha && (
+            {/* Reveal button - ALWAYS show for admin, regardless of observer mode */}
+            {isAdmin && (
               <button
                 className="btn-reveal"
-                onClick={() => {
-                  console.log("Reveal button clicked");
-                  socket.emit("reveal");
-                }}
+                onClick={handleReveal}
               >
                 <FaEye /> Reveal Votes
               </button>
@@ -1601,16 +2165,11 @@ useEffect(() => {
             )}
 
             {/* Admin Controls */}
-            {isManisha && (
+            {isAdmin && (
               <div className="admin-controls">
                 <button
                   className="btn-reset"
-                  onClick={() => {
-                    setRevealed(false);
-                    setResults(null);
-                    setSelectedCard(null);
-                    socket.emit("reset");
-                  }}
+                  onClick={handleReset}
                 >
                   <FaUndo /> Reset Voting
                 </button>
@@ -1635,7 +2194,7 @@ useEffect(() => {
                     />
                     <button
                       className="btn-finalize"
-                      onClick={() => socket.emit("finalize", { point: customPoint, jiraKey })}
+                      onClick={handleFinalize}
                     >
                       <FaStar /> Finalize {customPoint}
                     </button>
@@ -1661,7 +2220,10 @@ useEffect(() => {
                       setEditingAcceptanceVisual(false);
                       setEditingDescription(false);
                       setEditingDescriptionVisual(false);
-                      socket.emit("reset");
+                      socket.emit("reset", { roomId });
+
+                      // Clear localStorage for this room
+                      localStorage.removeItem(`storyData_${roomId}`);
                     }}
                   >
                     Reset List
