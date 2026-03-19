@@ -54,7 +54,7 @@ const StoryQueue = ({
       return;
     }
 
-    // Store both in state and in dataTransfer for redundancy
+    // Store the dragged item index in state
     setDraggedItem(index);
 
     // Set the data in dataTransfer
@@ -67,10 +67,14 @@ const StoryQueue = ({
 
     // Add a class for styling
     e.currentTarget.classList.add('dragging');
+
+    // This helps with some browsers
+    e.stopPropagation();
   };
 
   const handleDragOver = (e, index) => {
     e.preventDefault();
+    e.stopPropagation();
     if (draggedItem === null) return;
     setDragOverItem(index);
   };
@@ -107,15 +111,17 @@ const StoryQueue = ({
       return;
     }
 
+    // Create a new array from the current stories
     const newStories = [...stories];
-    const draggedStory = newStories[sourceIndex];
 
-    // Remove the dragged item
-    newStories.splice(sourceIndex, 1);
-    // Insert at the new position
+    // Remove the dragged item and insert at new position
+    const [draggedStory] = newStories.splice(sourceIndex, 1);
     newStories.splice(dropIndex, 0, draggedStory);
 
+    // Call the parent's reorder function
     onReorderStories(newStories);
+
+    // Reset drag states
     setDraggedItem(null);
     setDragOverItem(null);
   };
@@ -226,13 +232,7 @@ const StoryQueue = ({
                   key={`${story.key}-${index}`}
                   className={`story-queue-card ${status} ${isDragged ? 'dragging' : ''} ${isDragOver ? 'drag-over' : ''}`}
                   draggable={isAdmin}
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData('application/json', JSON.stringify({
-                      key: story.key,
-                      index: index
-                    }));
-                    handleDragStart(e, index);
-                  }}
+                  onDragStart={(e) => handleDragStart(e, index)}
                   onDragOver={(e) => handleDragOver(e, index)}
                   onDragEnd={handleDragEnd}
                   onDrop={(e) => handleDrop(e, index)}

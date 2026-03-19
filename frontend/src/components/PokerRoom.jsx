@@ -1529,12 +1529,40 @@ useEffect(() => {
                         }
                       }}
                       onReorderStories={(newList) => {
-                        setStoryList(newList);
-                        // Maintain current story reference
+                        console.log('Reordering stories:', newList);
+                        console.log('Current storyList:', storyList);
+                        console.log('Current index:', currentStoryIndex);
+
+                        // Get the current key as a string
                         const currentKey = storyList[currentStoryIndex];
-                        const newIndex = newList.findIndex(key => key === currentKey);
+                        console.log('Looking for key:', currentKey);
+
+                        // Find the new index by comparing the key property of each object
+                        const newIndex = newList.findIndex(item => item.key === currentKey);
+                        console.log('Found at index:', newIndex);
+
+                        // Extract just the keys for the storyList state
+                        const newKeyList = newList.map(item => item.key);
+                        console.log('New key list:', newKeyList);
+
+                        // Update the story list with just the keys
+                        setStoryList(newKeyList);
+
+                        // Update the current index if found
                         if (newIndex !== -1) {
+                          console.log('Updating current index to:', newIndex);
                           setCurrentStoryIndex(newIndex);
+                        }
+
+                        // Save to localStorage
+                        try {
+                          const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
+                          storyData.storyList = newKeyList;
+                          storyData.currentStoryIndex = newIndex !== -1 ? newIndex : currentStoryIndex;
+                          storyData.savedAt = new Date().toISOString();
+                          localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
+                        } catch (error) {
+                          console.error('Error saving to localStorage:', error);
                         }
                       }}
                       isAdmin={isAdmin}
