@@ -231,6 +231,41 @@ io.on("connection", (socket) => {
     }
   });
 
+  // Handle fetch multiple Jira details
+  socket.on("fetchMultipleJiraDetails", async ({ roomId, issueKeys }) => {
+    if (!rooms[roomId] || !issueKeys || !Array.isArray(issueKeys)) return;
+
+    try {
+      const results = {};
+
+      for (const key of issueKeys) {
+        try {
+          const details = await getJiraIssueDetails(key);
+          results[key] = {
+            summary: details.summary,
+            type: details.issueType,
+            status: details.status || "To Do",
+            description: details.description,
+            acceptanceCriteria: details.acceptanceCriteria
+          };
+          console.log(`Fetched details for ${key}: ${details.summary}`);
+        } catch (err) {
+          console.error(`Failed to fetch details for ${key}:`, err.message);
+          results[key] = {
+            summary: `Error loading ${key}`,
+            type: 'Story',
+            status: 'To Do'
+          };
+        }
+      }
+
+      socket.emit("multipleJiraDetails", { roomId, results });
+      console.log(`Sent multipleJiraDetails for ${Object.keys(results).length} stories`);
+    } catch (error) {
+      console.error("Error in fetchMultipleJiraDetails:", error);
+    }
+  });
+
   // Handle request observers
   socket.on("requestObservers", ({ roomId }) => {
     if (rooms[roomId]) {
@@ -471,16 +506,6 @@ io.on("connection", (socket) => {
       }
     });
   });
-});
-
-// API routes
-app.get('/api/test-issue', async (req, res) => {
-  try {
-    const details = await getJiraIssueDetails('EIPAAS-20957');
-    res.json(details);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
 });
 
 app.get('/api/room/:roomId', (req, res) => {

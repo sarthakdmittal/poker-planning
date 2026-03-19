@@ -10,6 +10,8 @@ import {
 } from "react-icons/fa";
 import '../../jira-content.css';
 import './PokerRoom.css';
+import StoryQueue from './StoryQueue';
+
 
 const cards = [0, 1, 2, 3, 5, 8, 13, 21];
 
@@ -466,6 +468,11 @@ export default function PokerRoom({ name, onLeaveRoom }) {
   // Add this with your other useState declarations
   const [roomIdCopied, setRoomIdCopied] = useState(false);
 
+    const [showDropZone, setShowDropZone] = useState(false);
+    const [draggedStory, setDraggedStory] = useState(null);
+    // Add this state to store details for ALL stories
+    const [allStoryDetails, setAllStoryDetails] = useState({});
+
   const storyStatuses = [
     "To Do",
     "In Progress",
@@ -539,6 +546,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
         setStoryList(parsed.storyList || []);
         setCurrentStoryIndex(parsed.currentStoryIndex || 0);
         setStoryListInput(parsed.storyListInput || "");
+        setAllStoryDetails(parsed.allStoryDetails || {});
 
         // Restore voting state
         setRevealed(parsed.revealed || false);
@@ -579,32 +587,47 @@ export default function PokerRoom({ name, onLeaveRoom }) {
         }
       }
 
+
       // Load saved observers from localStorage
-      const savedObservers = localStorage.getItem(`observers_${roomId}`);
-      if (savedObservers) {
-        const parsedObservers = JSON.parse(savedObservers);
-        // Check if observers data has timestamp
-        if (parsedObservers.savedAt) {
-          const savedTime = new Date(parsedObservers.savedAt).getTime();
-          const currentTime = new Date().getTime();
-          const hoursDiff = (currentTime - savedTime) / (1000 * 60 * 60);
+            // Load saved observers from localStorage
+            const savedObservers = localStorage.getItem(`observers_${roomId}`);
+            if (savedObservers) {
+              const parsedObservers = JSON.parse(savedObservers);
+              // Check if observers data has timestamp
+              if (parsedObservers.savedAt) {
+                const savedTime = new Date(parsedObservers.savedAt).getTime();
+                const currentTime = new Date().getTime();
+                const hoursDiff = (currentTime - savedTime) / (1000 * 60 * 60);
 
-          if (hoursDiff <= 24) {
-            setObservers(parsedObservers);
-          } else {
-            localStorage.removeItem(`observers_${roomId}`);
+                if (hoursDiff <= 24) {
+                  setObservers(parsedObservers);
+                } else {
+                  localStorage.removeItem(`observers_${roomId}`);
+                }
+              } else {
+                setObservers(parsedObservers);
+              }
+            }
+
+            const hasData = savedStoryData || savedUsers || savedObservers;
+            setTimeout(() => {
+              setIsLoading(false);
+            }, 100);
           }
-        } else {
-          setObservers(parsedObservers);
-        }
-      }
+        }, [roomId]);
 
-      const hasData = savedStoryData || savedUsers || savedObservers;
-      setTimeout(() => {
-        setIsLoading(false);
-      }, 100);
-    }
-  }, [roomId]);
+        // Fetch details for all stories when storyList changes
+        useEffect(() => {
+          if (storyList.length > 0 && roomId) {
+            console.log("Fetching details for all stories:", storyList);
+
+            // Request details for all stories at once
+            socket.emit("fetchMultipleJiraDetails", {
+              roomId,
+              issueKeys: storyList
+            });
+          }
+        }, [storyList, roomId]);
 
   // Try to recover admin from localStorage
   useEffect(() => {
@@ -655,6 +678,7 @@ useEffect(() => {
         userVotes,
         users,
         results,
+        allStoryDetails,
         savedAt: timestamp  // Add timestamp here
       };
       localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
@@ -677,7 +701,7 @@ useEffect(() => {
     }
   }, [roomId, jiraKey, issueTitle, acceptanceCriteria, description, issueType,
       storyStatus, storyList, currentStoryIndex, storyListInput, revealed,
-      finalPoint, selectedCard, votedUsers, userVotes, users, observers, results]);
+      finalPoint, selectedCard, votedUsers, userVotes, users, observers, results, allStoryDetails]);
 
   // Update this useEffect to handle reconnection better
   useEffect(() => {
@@ -865,7 +889,19 @@ useEffect(() => {
       console.log("Room joined confirmation:", data);
       // Optionally do something with this data
     });
+    // Listen for multiple Jira details
+    socket.on("multipleJiraDetails", ({ roomId: responseRoomId, results }) => {
+      if (responseRoomId === roomId) {
+        console.log("Received multipleJiraDetails:", results);
+        setAllStoryDetails(results);
 
+        // Save to localStorage
+        const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
+        storyData.allStoryDetails = results;
+        storyData.savedAt = new Date().toISOString();
+        localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
+      }
+    });
     socket.on("reveal", (data) => {
       setResults(data);
       setRevealed(true);
@@ -1126,6 +1162,57 @@ useEffect(() => {
     };
   }, [roomId, name, jiraKey]); // Add jiraKey as dependency
 
+    // Drag and drop handlers for loading stories
+    useEffect(() => {
+      const handleDragOver = (e) => {
+        e.preventDefault();
+        setShowDropZone(true);
+      };
+
+      const handleDragLeave = (e) => {
+        if (!e.relatedTarget || !e.relatedTarget.closest) {
+          setShowDropZone(false);
+        }
+      };
+
+      const handleDrop = (e) => {
+        e.preventDefault();
+        setShowDropZone(false);
+
+        try {
+          const storyData = JSON.parse(e.dataTransfer.getData('application/json'));
+          if (storyData && storyData.key) {
+            // Find the story in the list
+            const storyIndex = storyList.findIndex(key => key === storyData.key);
+            if (storyIndex !== -1) {
+              setCurrentStoryIndex(storyIndex);
+              setRevealed(false);
+              setResults(null);
+              setFinalPoint(null);
+              setObservingTarget(null);
+              socket.emit("reset", { roomId });
+            }
+          }
+        } catch (error) {
+          console.log('Drop error:', error);
+        }
+      };
+
+      const pokerContainer = document.querySelector('.poker-container');
+      if (pokerContainer) {
+        pokerContainer.addEventListener('dragover', handleDragOver);
+        pokerContainer.addEventListener('dragleave', handleDragLeave);
+        pokerContainer.addEventListener('drop', handleDrop);
+      }
+
+      return () => {
+        if (pokerContainer) {
+          pokerContainer.removeEventListener('dragover', handleDragOver);
+          pokerContainer.removeEventListener('dragleave', handleDragLeave);
+          pokerContainer.removeEventListener('drop', handleDrop);
+        }
+      };
+    }, [storyList, roomId, socket]);
   const handleVote = (value) => {
     if (isCurrentUserObserver) {
       alert("You are in observer mode and cannot vote");
@@ -1374,7 +1461,88 @@ useEffect(() => {
   // }, [roomId]);
 
   return (
-    <div className="poker-room">
+
+        <div className={`poker-room ${storyList.length > 0 ? 'with-sidebar' : ''}`}>
+                  {/* Story Queue Sidebar */}
+                  {storyList.length > 0 && (
+                    <StoryQueue
+                      stories={storyList.map((key) => {
+                        const details = allStoryDetails[key] || {};
+                        const isCurrent = key === storyList[currentStoryIndex];
+
+                        return {
+                          key,
+                          summary: details.summary || (isCurrent ? (issueTitle || `Loading ${key}...`) : `Loading ${key}...`),
+                          type: details.type || (isCurrent ? issueType : null),
+                          status: details.status || (isCurrent ? storyStatus : "To Do"),
+                          point: isCurrent && finalPoint ? finalPoint : null
+                        };
+                      })}
+                      currentStoryIndex={currentStoryIndex}
+                      onSelectStory={(index) => {
+                        setCurrentStoryIndex(index);
+                        setRevealed(false);
+                        setResults(null);
+                        setFinalPoint(null);
+                        setObservingTarget(null);
+                        setEditingAcceptance(false);
+                        setEditingAcceptanceVisual(false);
+                        setEditingDescription(false);
+                        setEditingDescriptionVisual(false);
+                        const selectedKey = storyList[index];
+                        if (selectedKey) {
+                          setJiraKey(selectedKey);
+                          socket.emit("fetchJiraDetails", { roomId, jiraKey: selectedKey });
+                        }
+                        socket.emit("reset", { roomId });
+                      }}
+                      onAddStories={(newStories) => {
+                        const keys = newStories.map(s => s.key);
+                        setStoryList([...storyList, ...keys]);
+
+                        // Immediately fetch details for the new stories
+                        setTimeout(() => {
+                          socket.emit("fetchMultipleJiraDetails", {
+                            roomId,
+                            issueKeys: keys
+                          });
+                        }, 100);
+                      }}
+                      onRemoveStory={(index) => {
+                        const removedKey = storyList[index];
+                        const newList = [...storyList];
+                        newList.splice(index, 1);
+                        setStoryList(newList);
+
+                        // Remove from allStoryDetails
+                        setAllStoryDetails(prev => {
+                          const updated = { ...prev };
+                          delete updated[removedKey];
+                          return updated;
+                        });
+
+                        // Adjust current index if needed
+                        if (index === currentStoryIndex) {
+                          setCurrentStoryIndex(Math.max(0, index - 1));
+                        } else if (index < currentStoryIndex) {
+                          setCurrentStoryIndex(currentStoryIndex - 1);
+                        }
+                      }}
+                      onReorderStories={(newList) => {
+                        setStoryList(newList);
+                        // Maintain current story reference
+                        const currentKey = storyList[currentStoryIndex];
+                        const newIndex = newList.findIndex(key => key === currentKey);
+                        if (newIndex !== -1) {
+                          setCurrentStoryIndex(newIndex);
+                        }
+                      }}
+                      isAdmin={isAdmin}
+                      votes={userVotes}
+                      revealed={revealed}
+                      finalPoint={finalPoint}
+                    />
+                  )}
       <div className="poker-container">
         {/* Header */}
         <div className="room-header">
@@ -2243,8 +2411,17 @@ useEffect(() => {
             </div>
             {issueTitle && <p className="final-story-title">{issueTitle}</p>}
           </div>
-        )}
-      </div>
-    </div>
-  );
-}
+         )}
+              </div>
+
+              {/* Drop Zone Indicator */}
+              {showDropZone && (
+                <div className="drop-zone-indicator">
+                  <FaStar size={32} />
+                  <span>Drop to load story for voting</span>
+                </div>
+              )}
+            </div>
+
+        );
+    }
