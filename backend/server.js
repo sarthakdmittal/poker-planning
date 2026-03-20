@@ -13,17 +13,25 @@ const {
 
 const app = express();
 app.use(cors({
-  origin: "http://localhost:3000",
+  origin: [
+    "http://localhost:3000",
+    "https://your-vercel-app.vercel.app"
+  ],
   credentials: true
 }));
-
+app.get("/", (req, res) => {
+  res.send("Server is running");
+});
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:3000",
+    origin: [
+      "http://localhost:3000",
+      "https://your-vercel-app.vercel.app"
+    ],
     methods: ["GET", "POST"],
     credentials: true
-  },
+  }
   transports: ['websocket', 'polling'],
   allowEIO3: true
 });

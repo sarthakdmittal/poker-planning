@@ -21,6 +21,13 @@ function App() {
     setIsLoading(false);
   }, []);
 
+useEffect(() => {
+  // Wake up backend (important for Render cold start)
+  fetch("https://poker-planning-1.onrender.com")
+    .then(() => console.log("Backend awake"))
+    .catch(() => console.log("Backend waking..."));
+}, []);
+
   // Save name to localStorage whenever it changes
   const handleSetName = (newName) => {
     setName(newName);
