@@ -1,4 +1,3 @@
-// server.js
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -59,7 +58,8 @@ io.on("connection", (socket) => {
       socket.emit("roomInfo", {
         roomId: roomId,
         roomName: rooms[roomId].name,
-        users: rooms[roomId].users
+        users: rooms[roomId].users,
+        estimationScale: rooms[roomId].estimationScale
       });
     } else {
       socket.emit("users", {});
@@ -81,16 +81,30 @@ io.on("connection", (socket) => {
 
   socket.on("getRoomInfo", ({ roomId }) => {
     if (rooms[roomId]) {
-      socket.emit("roomInfo", {
+      console.log(`===== GET ROOM INFO for ${roomId} =====`);
+      console.log("Room exists:", !!rooms[roomId]);
+      console.log("Room estimationScale:", rooms[roomId].estimationScale);
+
+      const response = {
         roomId: roomId,
         roomName: rooms[roomId].name,
-        users: rooms[roomId].users
-      });
+        users: rooms[roomId].users,
+        estimationScale: rooms[roomId].estimationScale
+      };
+
+      console.log("Sending response:", response);
+      socket.emit("roomInfo", response);
+      console.log("===== END GET ROOM INFO =====");
     }
   });
 
   // Handle room creation
-  socket.on("create-room", ({ userName, roomName, roomId }) => {
+  socket.on("create-room", ({ userName, roomName, roomId, estimationScale }) => {
+    console.log("===== CREATE ROOM =====");
+    console.log("Received estimationScale:", estimationScale);
+    console.log("Received estimationScale type:", estimationScale?.type);
+    console.log("Received estimationScale cards:", estimationScale?.cards);
+
     // Create new room
     rooms[roomId] = {
       name: roomName,
@@ -103,8 +117,16 @@ io.on("connection", (socket) => {
       createdBy: socket.id,
       createdAt: new Date().toISOString(),
       // Store the admin's socket ID for tracking disconnection
-      adminSocketId: socket.id
+      adminSocketId: socket.id,
+      // Store estimation scale
+      estimationScale: estimationScale || {
+        type: 'FIBONACCI',
+        cards: [0, 1, 2, 3, 5, 8, 13, 21]
+      }
     };
+
+    console.log("Stored estimationScale in room:", rooms[roomId].estimationScale);
+    console.log("===== END CREATE ROOM =====");
 
     // Join the socket to the room
     socket.join(roomId);
@@ -116,17 +138,18 @@ io.on("connection", (socket) => {
     // Send confirmation to the creator
     socket.emit("room-created", { roomId, roomName });
 
-    // Emit room data
+    // Emit room data including estimation scale
     io.to(roomId).emit("users", rooms[roomId].users);
     io.to(roomId).emit("admin", rooms[roomId].admin);
     io.to(roomId).emit("observersUpdate", rooms[roomId].observers);
     io.to(roomId).emit("roomInfo", {
       roomId: roomId,
       roomName: rooms[roomId].name,
-      users: rooms[roomId].users
+      users: rooms[roomId].users,
+      estimationScale: rooms[roomId].estimationScale
     });
 
-    console.log(`Room created: ${roomId} (${roomName}) by ${userName}`);
+    console.log(`Room created: ${roomId} (${roomName}) by ${userName} with scale: ${estimationScale?.type || 'FIBONACCI'}`);
   });
 
   // Handle joining existing room
@@ -172,7 +195,7 @@ io.on("connection", (socket) => {
 
       socket.join(roomId);
 
-      // Send all necessary data to the joining client
+      // Send all necessary data to the joining client including estimation scale
       socket.emit("room-joined", {
         roomId,
         roomName: rooms[roomId].name,
@@ -185,13 +208,20 @@ io.on("connection", (socket) => {
       socket.emit("roomInfo", {
         roomId: roomId,
         roomName: rooms[roomId].name,
-        users: rooms[roomId].users
+        users: rooms[roomId].users,
+        estimationScale: rooms[roomId].estimationScale
       });
 
       // Broadcast to all in room
       io.to(roomId).emit("users", rooms[roomId].users);
       io.to(roomId).emit("admin", rooms[roomId].admin);
       io.to(roomId).emit("observersUpdate", rooms[roomId].observers);
+      io.to(roomId).emit("roomInfo", {
+        roomId: roomId,
+        roomName: rooms[roomId].name,
+        users: rooms[roomId].users,
+        estimationScale: rooms[roomId].estimationScale
+      });
 
       console.log(`User ${userName} joined room: ${roomId}`);
     } else {
@@ -473,7 +503,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Handle disconnect - MODIFIED to NOT reassign admin
+  // Handle disconnect
   socket.on("disconnect", () => {
     console.log(`Socket disconnected: ${socket.id}`);
 
@@ -488,19 +518,24 @@ io.on("connection", (socket) => {
         delete rooms[roomId].observers[socket.id];
 
         // If the admin left, keep the admin name but mark that they're disconnected
-        // This way, when they reconnect, they'll still be admin
         if (wasAdmin) {
           console.log(`Admin ${leavingName} left room ${roomId}, waiting for reconnection...`);
-          // We keep rooms[roomId].admin as is, no reassignment
-          // Also store that admin is disconnected
           rooms[roomId].adminDisconnected = true;
           rooms[roomId].adminSocketId = null;
         }
 
         // Emit updates
         io.to(roomId).emit("users", rooms[roomId].users);
-        io.to(roomId).emit("admin", rooms[roomId].admin); // Still emit the same admin name
+        io.to(roomId).emit("admin", rooms[roomId].admin);
         io.to(roomId).emit("observersUpdate", rooms[roomId].observers);
+
+        // Also emit roomInfo with updated users
+        io.to(roomId).emit("roomInfo", {
+          roomId: roomId,
+          roomName: rooms[roomId].name,
+          users: rooms[roomId].users,
+          estimationScale: rooms[roomId].estimationScale
+        });
 
         // Clean up empty rooms
         if (Object.keys(rooms[roomId].users).length === 0) {
@@ -528,7 +563,8 @@ app.get('/api/rooms', (req, res) => {
     userCount: Object.keys(rooms[roomId].users).length,
     createdAt: rooms[roomId].createdAt,
     admin: rooms[roomId].admin,
-    adminPresent: rooms[roomId].users[rooms[roomId].adminSocketId] ? true : false
+    adminPresent: rooms[roomId].users[rooms[roomId].adminSocketId] ? true : false,
+    estimationScale: rooms[roomId].estimationScale
   }));
   res.json(activeRooms);
 });

@@ -1,8 +1,41 @@
-// components/CreateRoom.jsx
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { socket } from "../socket";
 import { FaCopy, FaRegCopy } from "react-icons/fa";
+
+// Define ESTIMATION_SCALES directly in this file
+const ESTIMATION_SCALES = {
+  FIBONACCI: {
+    name: 'Fibonacci',
+    cards: [0, 1, 2, 3, 5, 8, 13, 21],
+    description: 'Classic Fibonacci sequence'
+  },
+  FIBONACCI_MODIFIED: {
+    name: 'Modified Fibonacci',
+    cards: [0, 0.5, 1, 2, 3, 5, 8, 13, 20, 40, 100],
+    description: 'Extended Fibonacci with half points and larger values'
+  },
+  T_SHIRTS: {
+    name: 'T-Shirt Sizes',
+    cards: ['XS', 'S', 'M', 'L', 'XL', 'XXL'],
+    description: 'Relative sizing with T-shirt sizes'
+  },
+  POWDER_TWO: {
+    name: 'Powers of 2',
+    cards: [0, 1, 2, 4, 8, 16, 32, 64],
+    description: 'Exponential scale using powers of 2'
+  },
+  LINEAR: {
+    name: 'Linear',
+    cards: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    description: 'Simple linear scale 0-10'
+  },
+  CUSTOM: {
+    name: 'Custom',
+    cards: [],
+    description: 'Define your own custom scale'
+  }
+};
 
 export default function CreateRoom({ setName }) {
   const navigate = useNavigate();
@@ -12,6 +45,9 @@ export default function CreateRoom({ setName }) {
   const [roomIdCopied, setRoomIdCopied] = useState(false);
   const [socketConnected, setSocketConnected] = useState(socket.connected);
   const [userNameState, setUserNameState] = useState('');
+  const [selectedScale, setSelectedScale] = useState('FIBONACCI');
+  const [customScaleInput, setCustomScaleInput] = useState('');
+  const [showCustomScaleInput, setShowCustomScaleInput] = useState(false);
 
   useEffect(() => {
     const newRoomId = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -40,9 +76,8 @@ export default function CreateRoom({ setName }) {
     const handleRoomCreated = ({ roomId }) => {
       console.log('Room created successfully:', roomId);
       setIsLoading(false);
-
       navigate(`/room/${roomId}`, {
-        state: { userName: userNameState } // ✅ FIXED
+        state: { userName: userNameState }
       });
     };
 
@@ -51,7 +86,6 @@ export default function CreateRoom({ setName }) {
     socket.on('connect_error', onConnectError);
     socket.on('room-created', handleRoomCreated);
 
-    // Check initial connection
     setSocketConnected(socket.connected);
 
     return () => {
@@ -60,7 +94,7 @@ export default function CreateRoom({ setName }) {
       socket.off('connect_error', onConnectError);
       socket.off('room-created', handleRoomCreated);
     };
-  }, [navigate]);
+  }, [navigate, userNameState]);
 
   const createRoom = (e) => {
     e.preventDefault();
@@ -81,12 +115,36 @@ export default function CreateRoom({ setName }) {
       return;
     }
 
-    setUserNameState(userName); // ✅ ADD THIS
+    // Validate custom scale if selected
+    let cards;
+    if (selectedScale === 'CUSTOM') {
+      cards = customScaleInput.split(',').map(item => {
+        const trimmed = item.trim();
+        // Try to parse as number, if fails keep as string
+        const num = Number(trimmed);
+        return isNaN(num) ? trimmed : num;
+      });
 
+      if (cards.length === 0) {
+        setError('Please enter at least one value for custom scale');
+        setIsLoading(false);
+        return;
+      }
+    } else {
+      cards = ESTIMATION_SCALES[selectedScale].cards;
+    }
+
+    setUserNameState(userName);
+
+    // Include scale information in room creation
     socket.emit('create-room', {
       userName,
       roomName,
-      roomId: generatedRoomId
+      roomId: generatedRoomId,
+      estimationScale: {
+        type: selectedScale,
+        cards: cards
+      }
     });
 
     setName(userName);
@@ -102,6 +160,17 @@ export default function CreateRoom({ setName }) {
     navigator.clipboard.writeText(generatedRoomId);
     setRoomIdCopied(true);
     setTimeout(() => setRoomIdCopied(false), 2000);
+  };
+
+  const handleScaleChange = (e) => {
+    const scale = e.target.value;
+    setSelectedScale(scale);
+    setShowCustomScaleInput(scale === 'CUSTOM');
+
+    // Pre-fill custom scale with Fibonacci as example
+    if (scale === 'CUSTOM') {
+      setCustomScaleInput('0, 1, 2, 3, 5, 8, 13, 21');
+    }
   };
 
   return (
@@ -167,6 +236,56 @@ export default function CreateRoom({ setName }) {
             />
             <div className="input-hint">Give your session a descriptive name</div>
           </div>
+
+          {/* Estimation Scale Selection */}
+          <div className="form-group scale-selection-group">
+            <label className="form-label">
+              <span className="label-icon">📊</span>
+              Estimation Scale
+            </label>
+            <div className="scale-options">
+              {Object.entries(ESTIMATION_SCALES).map(([key, scale]) => (
+                <label key={key} className={`scale-option ${selectedScale === key ? 'selected' : ''}`}>
+                  <input
+                    type="radio"
+                    name="estimationScale"
+                    value={key}
+                    checked={selectedScale === key}
+                    onChange={handleScaleChange}
+                  />
+                  <div className="scale-option-content">
+                    <strong className="scale-name">{scale.name}</strong>
+                    <span className="scale-description">{scale.description}</span>
+                    <div className="scale-preview">
+                      {scale.cards.slice(0, 5).map((card, i) => (
+                        <span key={i} className="preview-card">{String(card)}</span>
+                      ))}
+                      {scale.cards.length > 5 && <span className="preview-more">...</span>}
+                    </div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Custom Scale Input */}
+          {showCustomScaleInput && (
+            <div className="form-group custom-scale-group">
+              <label htmlFor="customScale" className="form-label">
+                <span className="label-icon">✏️</span>
+                Custom Values (comma-separated)
+              </label>
+              <input
+                id="customScale"
+                type="text"
+                value={customScaleInput}
+                onChange={(e) => setCustomScaleInput(e.target.value)}
+                placeholder="e.g., 0, 1, 2, 3, 5, 8, 13, 21"
+                className="form-input"
+              />
+              <div className="input-hint">Enter numbers or text values separated by commas</div>
+            </div>
+          )}
 
           <div className="room-id-section">
             <div className="room-id-label">
@@ -243,10 +362,10 @@ export default function CreateRoom({ setName }) {
             </div>
           </div>
           <div className="feature-item">
-            <span className="feature-icon">👥</span>
+            <span className="feature-icon">📏</span>
             <div className="feature-text">
-              <strong>Team collaboration</strong>
-              <span>Up to 20 participants</span>
+              <strong>Multiple scales</strong>
+              <span>Fibonacci, T-shirts, and more</span>
             </div>
           </div>
         </div>

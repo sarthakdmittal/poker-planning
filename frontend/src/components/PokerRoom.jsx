@@ -12,8 +12,39 @@ import '../../jira-content.css';
 import './PokerRoom.css';
 import StoryQueue from './StoryQueue';
 
-
-const cards = [0, 1, 2, 3, 5, 8, 13, 21];
+// Estimation scale types
+const ESTIMATION_SCALES = {
+  FIBONACCI: {
+    name: 'Fibonacci',
+    cards: [0, 1, 2, 3, 5, 8, 13, 21],
+    description: 'Classic Fibonacci sequence'
+  },
+  FIBONACCI_MODIFIED: {
+    name: 'Modified Fibonacci',
+    cards: [0, 0.5, 1, 2, 3, 5, 8, 13, 20, 40, 100],
+    description: 'Extended Fibonacci with half points and larger values'
+  },
+  T_SHIRTS: {
+    name: 'T-Shirt Sizes',
+    cards: ['XS', 'S', 'M', 'L', 'XL', 'XXL'],
+    description: 'Relative sizing with T-shirt sizes'
+  },
+  POWDER_TWO: {
+    name: 'Powers of 2',
+    cards: [0, 1, 2, 4, 8, 16, 32, 64],
+    description: 'Exponential scale using powers of 2'
+  },
+  LINEAR: {
+    name: 'Linear',
+    cards: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    description: 'Simple linear scale 0-10'
+  },
+  CUSTOM: {
+    name: 'Custom',
+    cards: [],
+    description: 'Define your own custom scale'
+  }
+};
 
 // Generate avatar color based on user name
 const getAvatarColor = (name) => {
@@ -406,16 +437,31 @@ const calculateStats = (votes) => {
   const values = Object.values(votes).filter(v => v !== null && v !== undefined);
   if (values.length === 0) return null;
 
-  const sum = values.reduce((a, b) => a + b, 0);
-  const avg = sum / values.length;
-  const min = Math.min(...values);
-  const max = Math.max(...values);
+  // Handle both numeric and string values
+  const numericValues = values.map(v => {
+    if (typeof v === 'string' && isNaN(Number(v))) {
+      // For T-shirt sizes, assign numeric values for stats
+      const sizeMap = {
+        'XS': 1, 'S': 2, 'M': 3, 'L': 4, 'XL': 5, 'XXL': 6
+      };
+      return sizeMap[v] || 3; // Default to medium if unknown
+    }
+    return Number(v);
+  }).filter(v => !isNaN(v));
+
+  if (numericValues.length === 0) return null;
+
+  const sum = numericValues.reduce((a, b) => a + b, 0);
+  const avg = sum / numericValues.length;
+  const min = Math.min(...numericValues);
+  const max = Math.max(...numericValues);
 
   return {
     avg: avg.toFixed(1),
     min,
     max,
-    count: values.length
+    count: numericValues.length,
+    originalValues: values
   };
 };
 
@@ -453,11 +499,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
   // Add these with your other useState declarations
   const [availableTransitions, setAvailableTransitions] = useState([]);
   const [isLoadingTransitions, setIsLoadingTransitions] = useState(false);
-    const [isLoading, setIsLoading] = useState(true);
-  // Refs for visual editors
-  const acceptanceEditorRef = useRef(null);
-  const descriptionEditorRef = useRef(null);
-
+  const [isLoading, setIsLoading] = useState(true);
   // Observer mode states
   const [observers, setObservers] = useState({});
   const [observingTarget, setObservingTarget] = useState(null);
@@ -467,11 +509,13 @@ export default function PokerRoom({ name, onLeaveRoom }) {
   const [roomName, setRoomName] = useState("");
   // Add this with your other useState declarations
   const [roomIdCopied, setRoomIdCopied] = useState(false);
-
-    const [showDropZone, setShowDropZone] = useState(false);
-    const [draggedStory, setDraggedStory] = useState(null);
-    // Add this state to store details for ALL stories
-    const [allStoryDetails, setAllStoryDetails] = useState({});
+  const [showDropZone, setShowDropZone] = useState(false);
+  const [draggedStory, setDraggedStory] = useState(null);
+  // Add this state to store details for ALL stories
+  const [allStoryDetails, setAllStoryDetails] = useState({});
+  // Add estimation scale state
+  const [cards, setCards] = useState([0, 1, 2, 3, 5, 8, 13, 21]); // Default Fibonacci
+  const [scaleType, setScaleType] = useState('FIBONACCI');
 
   const storyStatuses = [
     "To Do",
@@ -547,6 +591,8 @@ export default function PokerRoom({ name, onLeaveRoom }) {
         setCurrentStoryIndex(parsed.currentStoryIndex || 0);
         setStoryListInput(parsed.storyListInput || "");
         setAllStoryDetails(parsed.allStoryDetails || {});
+        setCards(parsed.cards || [0, 1, 2, 3, 5, 8, 13, 21]);
+        setScaleType(parsed.scaleType || 'FIBONACCI');
 
         // Restore voting state
         setRevealed(parsed.revealed || false);
@@ -557,15 +603,15 @@ export default function PokerRoom({ name, onLeaveRoom }) {
 
         // If there was a final point, we might want to show results
         if (parsed.results) {
-                setResults(parsed.results);
-              } else if (parsed.revealed && parsed.userVotes && parsed.users) {
-                // For backward compatibility
-                setResults({
-                  votes: parsed.userVotes || {},
-                  users: parsed.users || {}
-                });
-              }
-            }
+          setResults(parsed.results);
+        } else if (parsed.revealed && parsed.userVotes && parsed.users) {
+          // For backward compatibility
+          setResults({
+            votes: parsed.userVotes || {},
+            users: parsed.users || {}
+          });
+        }
+      }
 
       // Load saved users from localStorage
       const savedUsers = localStorage.getItem(`users_${roomId}`);
@@ -587,47 +633,45 @@ export default function PokerRoom({ name, onLeaveRoom }) {
         }
       }
 
-
       // Load saved observers from localStorage
-            // Load saved observers from localStorage
-            const savedObservers = localStorage.getItem(`observers_${roomId}`);
-            if (savedObservers) {
-              const parsedObservers = JSON.parse(savedObservers);
-              // Check if observers data has timestamp
-              if (parsedObservers.savedAt) {
-                const savedTime = new Date(parsedObservers.savedAt).getTime();
-                const currentTime = new Date().getTime();
-                const hoursDiff = (currentTime - savedTime) / (1000 * 60 * 60);
+      const savedObservers = localStorage.getItem(`observers_${roomId}`);
+      if (savedObservers) {
+        const parsedObservers = JSON.parse(savedObservers);
+        // Check if observers data has timestamp
+        if (parsedObservers.savedAt) {
+          const savedTime = new Date(parsedObservers.savedAt).getTime();
+          const currentTime = new Date().getTime();
+          const hoursDiff = (currentTime - savedTime) / (1000 * 60 * 60);
 
-                if (hoursDiff <= 24) {
-                  setObservers(parsedObservers);
-                } else {
-                  localStorage.removeItem(`observers_${roomId}`);
-                }
-              } else {
-                setObservers(parsedObservers);
-              }
-            }
-
-            const hasData = savedStoryData || savedUsers || savedObservers;
-            setTimeout(() => {
-              setIsLoading(false);
-            }, 100);
+          if (hoursDiff <= 24) {
+            setObservers(parsedObservers);
+          } else {
+            localStorage.removeItem(`observers_${roomId}`);
           }
-        }, [roomId]);
+        } else {
+          setObservers(parsedObservers);
+        }
+      }
 
-        // Fetch details for all stories when storyList changes
-        useEffect(() => {
-          if (storyList.length > 0 && roomId) {
-            console.log("Fetching details for all stories:", storyList);
+      const hasData = savedStoryData || savedUsers || savedObservers;
+      setTimeout(() => {
+        setIsLoading(false);
+      }, 100);
+    }
+  }, [roomId]);
 
-            // Request details for all stories at once
-            socket.emit("fetchMultipleJiraDetails", {
-              roomId,
-              issueKeys: storyList
-            });
-          }
-        }, [storyList, roomId]);
+  // Fetch details for all stories when storyList changes
+  useEffect(() => {
+    if (storyList.length > 0 && roomId) {
+      console.log("Fetching details for all stories:", storyList);
+
+      // Request details for all stories at once
+      socket.emit("fetchMultipleJiraDetails", {
+        roomId,
+        issueKeys: storyList
+      });
+    }
+  }, [storyList, roomId]);
 
   // Try to recover admin from localStorage
   useEffect(() => {
@@ -648,14 +692,13 @@ export default function PokerRoom({ name, onLeaveRoom }) {
     }
   }, [roomId]);
 
-useEffect(() => {
-  if (roomId && name) {
-    // Request current story data
-    socket.emit("requestCurrentStory", { roomId });
-  }
-}, [roomId, name]);
+  useEffect(() => {
+    if (roomId && name) {
+      // Request current story data
+      socket.emit("requestCurrentStory", { roomId });
+    }
+  }, [roomId, name]);
 
-  // Save story data to localStorage whenever it changes
   // Save story data to localStorage whenever it changes
   useEffect(() => {
     if (roomId) {
@@ -679,6 +722,8 @@ useEffect(() => {
         users,
         results,
         allStoryDetails,
+        cards,
+        scaleType,
         savedAt: timestamp  // Add timestamp here
       };
       localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
@@ -701,7 +746,7 @@ useEffect(() => {
     }
   }, [roomId, jiraKey, issueTitle, acceptanceCriteria, description, issueType,
       storyStatus, storyList, currentStoryIndex, storyListInput, revealed,
-      finalPoint, selectedCard, votedUsers, userVotes, users, observers, results, allStoryDetails]);
+      finalPoint, selectedCard, votedUsers, userVotes, users, observers, results, allStoryDetails, cards, scaleType]);
 
   // Update this useEffect to handle reconnection better
   useEffect(() => {
@@ -736,7 +781,7 @@ useEffect(() => {
       if (roomId) {
         socket.emit("getUsers", { roomId });
         socket.emit("requestObservers", { roomId });
-        socket.emit("getCurrentAdmin", { roomId }); // ADD THIS LINE
+        socket.emit("getCurrentAdmin", { roomId });
 
         // Re-fetch Jira details on reconnect if we have a jiraKey
         if (jiraKey) {
@@ -798,7 +843,7 @@ useEffect(() => {
       socket.off("users", handleUsersUpdate);
       clearTimeout(timeout);
     };
-  }, [roomId, name, users]); // Add users as dependency
+  }, [roomId, name, users]);
 
   // Add this near your other useEffects in PokerRoom.jsx
   useEffect(() => {
@@ -816,7 +861,7 @@ useEffect(() => {
 
     socket.on("users", (data) => {
       console.log("Received users update:", data);
-    // If we're observing someone who left, clear observation
+      // If we're observing someone who left, clear observation
       if (observingTarget && !Object.keys(data).includes(observingTarget)) {
         console.log("Observed user left, clearing observation");
         setObservingTarget(null);
@@ -825,14 +870,14 @@ useEffect(() => {
       const currentUserStillInRoom = Object.values(data).includes(name);
 
       setUsers(data);
-            // Add this to save users to localStorage
-              if (roomId) {
-                const usersWithTimestamp = {
-                  ...data,
-                  savedAt: new Date().toISOString()
-                };
-                localStorage.setItem(`users_${roomId}`, JSON.stringify(usersWithTimestamp));
-              }
+      // Add this to save users to localStorage
+      if (roomId) {
+        const usersWithTimestamp = {
+          ...data,
+          savedAt: new Date().toISOString()
+        };
+        localStorage.setItem(`users_${roomId}`, JSON.stringify(usersWithTimestamp));
+      }
       // If current user is no longer in the room, they were kicked or disconnected
       if (!currentUserStillInRoom && !isReconnecting) {
         console.log("Current user no longer in room, redirecting to home");
@@ -857,25 +902,75 @@ useEffect(() => {
       }
     });
 
-    // ADD THIS NEW LISTENER FOR ROOM INFO
+    // In PokerRoom.jsx, find the roomInfo listener and update it:
+
+    // In PokerRoom.jsx, find the roomInfo listener and update it with more detailed logging:
+
     socket.on("roomInfo", (data) => {
-      console.log("Received room info:", data);
+      console.log("===== ROOM INFO RECEIVED =====");
+      console.log("Full room info data:", data);
+      console.log("Room name:", data?.roomName);
+      console.log("Estimation scale:", data?.estimationScale);
+
       if (data && data.roomName) {
         setRoomName(data.roomName);
       }
+
+      // Update cards based on room's estimation scale
+      if (data && data.estimationScale) {
+        console.log("Scale type from server:", data.estimationScale.type);
+        console.log("Cards from server:", data.estimationScale.cards);
+
+        if (data.estimationScale.cards) {
+          console.log("Setting cards to:", data.estimationScale.cards);
+          setCards(data.estimationScale.cards);
+
+          // Make sure the scale type matches the keys in ESTIMATION_SCALES
+          const scaleTypeFromServer = data.estimationScale.type;
+
+          // Log available scale types
+          console.log("Available scale types:", Object.keys(ESTIMATION_SCALES));
+
+          // Check if this key exists in ESTIMATION_SCALES
+          if (scaleTypeFromServer && ESTIMATION_SCALES[scaleTypeFromServer]) {
+            console.log("Found matching scale type:", scaleTypeFromServer);
+            setScaleType(scaleTypeFromServer);
+          } else {
+            console.warn("Unknown scale type:", scaleTypeFromServer);
+
+            // Try to find by matching the cards array
+            const foundScale = Object.entries(ESTIMATION_SCALES).find(([key, scale]) => {
+              const match = JSON.stringify(scale.cards) === JSON.stringify(data.estimationScale.cards);
+              if (match) console.log("Found scale by cards match:", key);
+              return match;
+            });
+
+            if (foundScale) {
+              console.log("Setting scale type from cards match:", foundScale[0]);
+              setScaleType(foundScale[0]);
+            } else {
+              console.log("No match found, defaulting to FIBONACCI");
+              setScaleType('FIBONACCI');
+            }
+          }
+        }
+      } else {
+        console.log("No estimation scale in room info");
+      }
+      console.log("===== END ROOM INFO =====");
     });
 
     socket.on("observersUpdate", (observerData) => {
       console.log("Received observers update:", observerData);
       setObservers(observerData);
-        // Add this to save observers to localStorage
-          if (roomId) {
-            const observersWithTimestamp = {
-              ...observerData,
-              savedAt: new Date().toISOString()
-            };
-            localStorage.setItem(`observers_${roomId}`, JSON.stringify(observersWithTimestamp));
-          }
+      // Add this to save observers to localStorage
+      if (roomId) {
+        const observersWithTimestamp = {
+          ...observerData,
+          savedAt: new Date().toISOString()
+        };
+        localStorage.setItem(`observers_${roomId}`, JSON.stringify(observersWithTimestamp));
+      }
       // Find current user ID after users state is updated
       const currentUserId = Object.keys(users).find(uid => users[uid] === name);
       if (currentUserId && observerData[currentUserId]) {
@@ -905,16 +1000,16 @@ useEffect(() => {
     socket.on("reveal", (data) => {
       setResults(data);
       setRevealed(true);
-       // Save to localStorage
-        if (roomId) {
-          const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
-          storyData.revealed = true;
-          storyData.results = data;
-          storyData.votedUsers = Object.keys(data.votes || {});
-          storyData.userVotes = data.votes || {};
-          storyData.savedAt = new Date().toISOString();
-          localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
-        }
+      // Save to localStorage
+      if (roomId) {
+        const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
+        storyData.revealed = true;
+        storyData.results = data;
+        storyData.votedUsers = Object.keys(data.votes || {});
+        storyData.userVotes = data.votes || {};
+        storyData.savedAt = new Date().toISOString();
+        localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
+      }
     });
 
     socket.on("storyStatusUpdate", ({ jiraKey: key, status }) => {
@@ -963,16 +1058,16 @@ useEffect(() => {
       setObservers({});
       setObservingTarget(null);
       // Save reset state to localStorage
-        if (roomId) {
-          const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
-          storyData.revealed = false;
-          storyData.results = null;
-          storyData.finalPoint = null;
-          storyData.votedUsers = [];
-          storyData.userVotes = {};
-          storyData.savedAt = new Date().toISOString();
-          localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
-        }
+      if (roomId) {
+        const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
+        storyData.revealed = false;
+        storyData.results = null;
+        storyData.finalPoint = null;
+        storyData.votedUsers = [];
+        storyData.userVotes = {};
+        storyData.savedAt = new Date().toISOString();
+        localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
+      }
     });
 
     socket.on("admin", (data) => {
@@ -1050,9 +1145,9 @@ useEffect(() => {
       socket.off("observersUpdate");
       socket.off("roomInfo");
       socket.off("jiraTransitions");
-      socket.off("currentAdmin"); // ADD THIS LINE
+      socket.off("currentAdmin");
     };
-  }, [name, users, roomId, jiraKey]);
+  }, [name, users, roomId, jiraKey, revealed]);
 
   const isAdmin = name && adminName && name === adminName;
 
@@ -1135,7 +1230,7 @@ useEffect(() => {
       setTimeout(() => {
         socket.emit("getUsers", { roomId });
         socket.emit("requestObservers", { roomId });
-        socket.emit("getCurrentAdmin", { roomId }); // ADD THIS LINE
+        socket.emit("getCurrentAdmin", { roomId });
 
         // Re-fetch Jira details if we have a jiraKey
         if (jiraKey) {
@@ -1160,59 +1255,60 @@ useEffect(() => {
       socket.off("connect", handleReconnect);
       socket.off("reconnect", handleReconnect);
     };
-  }, [roomId, name, jiraKey]); // Add jiraKey as dependency
+  }, [roomId, name, jiraKey]);
 
-    // Drag and drop handlers for loading stories
-    useEffect(() => {
-      const handleDragOver = (e) => {
-        e.preventDefault();
-        setShowDropZone(true);
-      };
+  // Drag and drop handlers for loading stories
+  useEffect(() => {
+    const handleDragOver = (e) => {
+      e.preventDefault();
+      setShowDropZone(true);
+    };
 
-      const handleDragLeave = (e) => {
-        if (!e.relatedTarget || !e.relatedTarget.closest) {
-          setShowDropZone(false);
-        }
-      };
-
-      const handleDrop = (e) => {
-        e.preventDefault();
+    const handleDragLeave = (e) => {
+      if (!e.relatedTarget || !e.relatedTarget.closest) {
         setShowDropZone(false);
-
-        try {
-          const storyData = JSON.parse(e.dataTransfer.getData('application/json'));
-          if (storyData && storyData.key) {
-            // Find the story in the list
-            const storyIndex = storyList.findIndex(key => key === storyData.key);
-            if (storyIndex !== -1) {
-              setCurrentStoryIndex(storyIndex);
-              setRevealed(false);
-              setResults(null);
-              setFinalPoint(null);
-              setObservingTarget(null);
-              socket.emit("reset", { roomId });
-            }
-          }
-        } catch (error) {
-          console.log('Drop error:', error);
-        }
-      };
-
-      const pokerContainer = document.querySelector('.poker-container');
-      if (pokerContainer) {
-        pokerContainer.addEventListener('dragover', handleDragOver);
-        pokerContainer.addEventListener('dragleave', handleDragLeave);
-        pokerContainer.addEventListener('drop', handleDrop);
       }
+    };
 
-      return () => {
-        if (pokerContainer) {
-          pokerContainer.removeEventListener('dragover', handleDragOver);
-          pokerContainer.removeEventListener('dragleave', handleDragLeave);
-          pokerContainer.removeEventListener('drop', handleDrop);
+    const handleDrop = (e) => {
+      e.preventDefault();
+      setShowDropZone(false);
+
+      try {
+        const storyData = JSON.parse(e.dataTransfer.getData('application/json'));
+        if (storyData && storyData.key) {
+          // Find the story in the list
+          const storyIndex = storyList.findIndex(key => key === storyData.key);
+          if (storyIndex !== -1) {
+            setCurrentStoryIndex(storyIndex);
+            setRevealed(false);
+            setResults(null);
+            setFinalPoint(null);
+            setObservingTarget(null);
+            socket.emit("reset", { roomId });
+          }
         }
-      };
-    }, [storyList, roomId, socket]);
+      } catch (error) {
+        console.log('Drop error:', error);
+      }
+    };
+
+    const pokerContainer = document.querySelector('.poker-container');
+    if (pokerContainer) {
+      pokerContainer.addEventListener('dragover', handleDragOver);
+      pokerContainer.addEventListener('dragleave', handleDragLeave);
+      pokerContainer.addEventListener('drop', handleDrop);
+    }
+
+    return () => {
+      if (pokerContainer) {
+        pokerContainer.removeEventListener('dragover', handleDragOver);
+        pokerContainer.removeEventListener('dragleave', handleDragLeave);
+        pokerContainer.removeEventListener('drop', handleDrop);
+      }
+    };
+  }, [storyList, roomId, socket]);
+
   const handleVote = (value) => {
     if (isCurrentUserObserver) {
       alert("You are in observer mode and cannot vote");
@@ -1235,16 +1331,16 @@ useEffect(() => {
       }
       socket.emit("vote", { roomId, point: value });
     }
-// Save to localStorage immediately
-  if (roomId) {
-    const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
-    storyData.selectedCard = value === selectedCard ? null : value;
-    storyData.votedUsers = value === selectedCard
-      ? votedUsers.filter(uid => uid !== currentUserId)
-      : [...votedUsers, currentUserId];
-    storyData.savedAt = new Date().toISOString();
-    localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
-  }
+    // Save to localStorage immediately
+    if (roomId) {
+      const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
+      storyData.selectedCard = value === selectedCard ? null : value;
+      storyData.votedUsers = value === selectedCard
+        ? votedUsers.filter(uid => uid !== currentUserId)
+        : [...votedUsers, currentUserId];
+      storyData.savedAt = new Date().toISOString();
+      localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
+    }
   };
 
   const fetchAvailableTransitions = (key) => {
@@ -1350,7 +1446,6 @@ useEffect(() => {
     console.log("Reveal button clicked");
     socket.emit("reveal", { roomId });
     // Save to localStorage
-
   };
 
   const handleReset = () => {
@@ -1358,7 +1453,6 @@ useEffect(() => {
     setResults(null);
     setSelectedCard(null);
     socket.emit("reset", { roomId });
-
   };
 
   const handleFinalize = () => {
@@ -1368,13 +1462,13 @@ useEffect(() => {
     });
     setFinalPoint(customPoint);
 
-      // Save to localStorage
-      if (roomId) {
-        const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
-        storyData.finalPoint = customPoint;
-        storyData.savedAt = new Date().toISOString();
-        localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
-      }
+    // Save to localStorage
+    if (roomId) {
+      const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
+      storyData.finalPoint = customPoint;
+      storyData.savedAt = new Date().toISOString();
+      localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
+    }
   };
 
   const handleSaveAcceptance = () => {
@@ -1437,140 +1531,130 @@ useEffect(() => {
   };
 
   const handleLeaveRoom = () => {
-      // Clear name from localStorage
-      localStorage.removeItem("pokerUserName");
-      // Clear admin data for this room
-      if (roomId) {
-        localStorage.removeItem(`admin_${roomId}`);
-      }
-      // Call the onLeaveRoom callback to update App state
-      if (onLeaveRoom) {
-        onLeaveRoom();
-      }
-      // Navigate to home page
-      window.location.href = '/';
-    };
-
-  // Clear story data when unmounting (optional - remove if you want to keep it)
-  // useEffect(() => {
-  //   return () => {
-  //     if (roomId) {
-  //       localStorage.removeItem(`storyData_${roomId}`);
-  //     }
-  //   };
-  // }, [roomId]);
+    // Clear name from localStorage
+    localStorage.removeItem("pokerUserName");
+    // Clear admin data for this room
+    if (roomId) {
+      localStorage.removeItem(`admin_${roomId}`);
+    }
+    // Call the onLeaveRoom callback to update App state
+    if (onLeaveRoom) {
+      onLeaveRoom();
+    }
+    // Navigate to home page
+    window.location.href = '/';
+  };
 
   return (
+    <div className={`poker-room ${storyList.length > 0 ? 'with-sidebar' : ''}`}>
+      {/* Story Queue Sidebar */}
+      {storyList.length > 0 && (
+        <StoryQueue
+          stories={storyList.map((key) => {
+            const details = allStoryDetails[key] || {};
+            const isCurrent = key === storyList[currentStoryIndex];
 
-        <div className={`poker-room ${storyList.length > 0 ? 'with-sidebar' : ''}`}>
-                  {/* Story Queue Sidebar */}
-                  {storyList.length > 0 && (
-                    <StoryQueue
-                      stories={storyList.map((key) => {
-                        const details = allStoryDetails[key] || {};
-                        const isCurrent = key === storyList[currentStoryIndex];
+            return {
+              key,
+              summary: details.summary || (isCurrent ? (issueTitle || `Loading ${key}...`) : `Loading ${key}...`),
+              type: details.type || (isCurrent ? issueType : null),
+              status: details.status || (isCurrent ? storyStatus : "To Do"),
+              point: isCurrent && finalPoint ? finalPoint : null
+            };
+          })}
+          currentStoryIndex={currentStoryIndex}
+          onSelectStory={(index) => {
+            setCurrentStoryIndex(index);
+            setRevealed(false);
+            setResults(null);
+            setFinalPoint(null);
+            setObservingTarget(null);
+            setEditingAcceptance(false);
+            setEditingAcceptanceVisual(false);
+            setEditingDescription(false);
+            setEditingDescriptionVisual(false);
+            const selectedKey = storyList[index];
+            if (selectedKey) {
+              setJiraKey(selectedKey);
+              socket.emit("fetchJiraDetails", { roomId, jiraKey: selectedKey });
+            }
+            socket.emit("reset", { roomId });
+          }}
+          onAddStories={(newStories) => {
+            const keys = newStories.map(s => s.key);
+            setStoryList([...storyList, ...keys]);
 
-                        return {
-                          key,
-                          summary: details.summary || (isCurrent ? (issueTitle || `Loading ${key}...`) : `Loading ${key}...`),
-                          type: details.type || (isCurrent ? issueType : null),
-                          status: details.status || (isCurrent ? storyStatus : "To Do"),
-                          point: isCurrent && finalPoint ? finalPoint : null
-                        };
-                      })}
-                      currentStoryIndex={currentStoryIndex}
-                      onSelectStory={(index) => {
-                        setCurrentStoryIndex(index);
-                        setRevealed(false);
-                        setResults(null);
-                        setFinalPoint(null);
-                        setObservingTarget(null);
-                        setEditingAcceptance(false);
-                        setEditingAcceptanceVisual(false);
-                        setEditingDescription(false);
-                        setEditingDescriptionVisual(false);
-                        const selectedKey = storyList[index];
-                        if (selectedKey) {
-                          setJiraKey(selectedKey);
-                          socket.emit("fetchJiraDetails", { roomId, jiraKey: selectedKey });
-                        }
-                        socket.emit("reset", { roomId });
-                      }}
-                      onAddStories={(newStories) => {
-                        const keys = newStories.map(s => s.key);
-                        setStoryList([...storyList, ...keys]);
+            // Immediately fetch details for the new stories
+            setTimeout(() => {
+              socket.emit("fetchMultipleJiraDetails", {
+                roomId,
+                issueKeys: keys
+              });
+            }, 100);
+          }}
+          onRemoveStory={(index) => {
+            const removedKey = storyList[index];
+            const newList = [...storyList];
+            newList.splice(index, 1);
+            setStoryList(newList);
 
-                        // Immediately fetch details for the new stories
-                        setTimeout(() => {
-                          socket.emit("fetchMultipleJiraDetails", {
-                            roomId,
-                            issueKeys: keys
-                          });
-                        }, 100);
-                      }}
-                      onRemoveStory={(index) => {
-                        const removedKey = storyList[index];
-                        const newList = [...storyList];
-                        newList.splice(index, 1);
-                        setStoryList(newList);
+            // Remove from allStoryDetails
+            setAllStoryDetails(prev => {
+              const updated = { ...prev };
+              delete updated[removedKey];
+              return updated;
+            });
 
-                        // Remove from allStoryDetails
-                        setAllStoryDetails(prev => {
-                          const updated = { ...prev };
-                          delete updated[removedKey];
-                          return updated;
-                        });
+            // Adjust current index if needed
+            if (index === currentStoryIndex) {
+              setCurrentStoryIndex(Math.max(0, index - 1));
+            } else if (index < currentStoryIndex) {
+              setCurrentStoryIndex(currentStoryIndex - 1);
+            }
+          }}
+          onReorderStories={(newList) => {
+            console.log('Reordering stories:', newList);
+            console.log('Current storyList:', storyList);
+            console.log('Current index:', currentStoryIndex);
 
-                        // Adjust current index if needed
-                        if (index === currentStoryIndex) {
-                          setCurrentStoryIndex(Math.max(0, index - 1));
-                        } else if (index < currentStoryIndex) {
-                          setCurrentStoryIndex(currentStoryIndex - 1);
-                        }
-                      }}
-                      onReorderStories={(newList) => {
-                        console.log('Reordering stories:', newList);
-                        console.log('Current storyList:', storyList);
-                        console.log('Current index:', currentStoryIndex);
+            // Get the current key as a string
+            const currentKey = storyList[currentStoryIndex];
+            console.log('Looking for key:', currentKey);
 
-                        // Get the current key as a string
-                        const currentKey = storyList[currentStoryIndex];
-                        console.log('Looking for key:', currentKey);
+            // Find the new index by comparing the key property of each object
+            const newIndex = newList.findIndex(item => item.key === currentKey);
+            console.log('Found at index:', newIndex);
 
-                        // Find the new index by comparing the key property of each object
-                        const newIndex = newList.findIndex(item => item.key === currentKey);
-                        console.log('Found at index:', newIndex);
+            // Extract just the keys for the storyList state
+            const newKeyList = newList.map(item => item.key);
+            console.log('New key list:', newKeyList);
 
-                        // Extract just the keys for the storyList state
-                        const newKeyList = newList.map(item => item.key);
-                        console.log('New key list:', newKeyList);
+            // Update the story list with just the keys
+            setStoryList(newKeyList);
 
-                        // Update the story list with just the keys
-                        setStoryList(newKeyList);
+            // Update the current index if found
+            if (newIndex !== -1) {
+              console.log('Updating current index to:', newIndex);
+              setCurrentStoryIndex(newIndex);
+            }
 
-                        // Update the current index if found
-                        if (newIndex !== -1) {
-                          console.log('Updating current index to:', newIndex);
-                          setCurrentStoryIndex(newIndex);
-                        }
-
-                        // Save to localStorage
-                        try {
-                          const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
-                          storyData.storyList = newKeyList;
-                          storyData.currentStoryIndex = newIndex !== -1 ? newIndex : currentStoryIndex;
-                          storyData.savedAt = new Date().toISOString();
-                          localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
-                        } catch (error) {
-                          console.error('Error saving to localStorage:', error);
-                        }
-                      }}
-                      isAdmin={isAdmin}
-                      votes={userVotes}
-                      revealed={revealed}
-                      finalPoint={finalPoint}
-                    />
-                  )}
+            // Save to localStorage
+            try {
+              const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
+              storyData.storyList = newKeyList;
+              storyData.currentStoryIndex = newIndex !== -1 ? newIndex : currentStoryIndex;
+              storyData.savedAt = new Date().toISOString();
+              localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
+            } catch (error) {
+              console.error('Error saving to localStorage:', error);
+            }
+          }}
+          isAdmin={isAdmin}
+          votes={userVotes}
+          revealed={revealed}
+          finalPoint={finalPoint}
+        />
+      )}
       <div className="poker-container">
         {/* Header */}
         <div className="room-header">
@@ -1615,13 +1699,13 @@ useEffect(() => {
             <p>Reconnecting to room...</p>
           </div>
         )}
-             {/* Loading Indicator */}
-                    {isLoading && (
-                      <div className="loading-indicator">
-                        <div className="spinner"></div>
-                        <p>Loading your session...</p>
-                      </div>
-                    )}
+        {/* Loading Indicator */}
+        {isLoading && (
+          <div className="loading-indicator">
+            <div className="spinner"></div>
+            <p>Loading your session...</p>
+          </div>
+        )}
         {/* Observing Target Indicator */}
         {observingTarget && (
           <div className="observing-indicator">
@@ -1652,7 +1736,7 @@ useEffect(() => {
           </div>
           <div className="participants-grid">
             {Object.entries(users).map(([userId, userName]) => {
-                if (!userId || !userName) return null;
+              if (!userId || !userName) return null;
               const hasVoted = !revealed && votedUsers.includes(userId);
               const backgroundColor = getAvatarColor(userName);
               const isObserver = observers[userId];
@@ -1780,11 +1864,11 @@ useEffect(() => {
                   value={storyStatus}
                   onChange={handleStatusChange}
                   onClick={() => {
-                          // Fetch transitions when dropdown is clicked
-                          if (jiraKey && isAdmin) {
-                            fetchAvailableTransitions(jiraKey);
-                          }
-                        }}
+                    // Fetch transitions when dropdown is clicked
+                    if (jiraKey && isAdmin) {
+                      fetchAvailableTransitions(jiraKey);
+                    }
+                  }}
                   disabled={isCurrentUserObserver || !isAdmin }
                 >
                   {availableTransitions.length > 0 ? (
@@ -2130,8 +2214,7 @@ useEffect(() => {
 
         {/* Story List Input (Admin only) */}
         {!isLoading && !isCurrentUserObserver && isAdmin && storyList.length === 0 && !jiraKey && !issueTitle &&
-                                                                                                   !acceptanceCriteria &&
-                                                                                                   !description && (
+         !acceptanceCriteria && !description && (
           <div className="story-list-input">
             <h4>Enter Jira Issues</h4>
             <p className="input-hint">One issue key per line (e.g., PROJ-123)</p>
@@ -2159,6 +2242,16 @@ useEffect(() => {
         {!revealed && (
           <div className="voting-section">
             <h3>Select your estimate</h3>
+
+            {/* Scale Info */}
+            <div className="scale-info">
+              <span className="scale-badge">
+                  {ESTIMATION_SCALES[scaleType]?.name ||
+                   (cards.length > 0 && cards[0] === 'XS' ? 'T-Shirt Sizes' :
+                    cards.length > 0 && typeof cards[0] === 'string' ? 'Custom Text' :
+                    ESTIMATION_SCALES.FIBONACCI.name)}
+                </span>
+            </div>
 
             {/* Always show cards for non-observers */}
             {!isCurrentUserObserver && (
@@ -2382,11 +2475,19 @@ useEffect(() => {
                   )}
                   <div className="point-input-group">
                     <input
-                      type="number"
+                      type={typeof cards[0] === 'number' ? 'number' : 'text'}
                       value={customPoint}
-                      onChange={e => setCustomPoint(Number(e.target.value))}
+                      onChange={e => {
+                        const val = e.target.value;
+                        if (typeof cards[0] === 'number') {
+                          setCustomPoint(Number(val));
+                        } else {
+                          setCustomPoint(val);
+                        }
+                      }}
                       min={0}
                       className="point-input"
+                      placeholder="Final value"
                     />
                     <button
                       className="btn-finalize"
@@ -2439,17 +2540,16 @@ useEffect(() => {
             </div>
             {issueTitle && <p className="final-story-title">{issueTitle}</p>}
           </div>
-         )}
-              </div>
+        )}
+      </div>
 
-              {/* Drop Zone Indicator */}
-              {showDropZone && (
-                <div className="drop-zone-indicator">
-                  <FaStar size={32} />
-                  <span>Drop to load story for voting</span>
-                </div>
-              )}
-            </div>
-
-        );
-    }
+      {/* Drop Zone Indicator */}
+      {showDropZone && (
+        <div className="drop-zone-indicator">
+          <FaStar size={32} />
+          <span>Drop to load story for voting</span>
+        </div>
+      )}
+    </div>
+  );
+}
