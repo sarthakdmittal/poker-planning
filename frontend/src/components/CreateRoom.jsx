@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { socket } from "../socket";
-import { FaCopy, FaRegCopy } from "react-icons/fa";
+import { FaCopy, FaRegCopy, FaSave, FaTrash, FaEye, FaEyeSlash } from "react-icons/fa";
 
 // Define ESTIMATION_SCALES
 const ESTIMATION_SCALES = {
@@ -55,6 +55,22 @@ export default function CreateRoom({ setName }) {
   const [jiraToken, setJiraToken] = useState('');
   const [showJiraToken, setShowJiraToken] = useState(false);
 
+  // Save credentials state
+  const [showSavedCredentialsPrompt, setShowSavedCredentialsPrompt] = useState(false);
+  const [savedCredentialsEmail, setSavedCredentialsEmail] = useState('');
+  const [message, setMessage] = useState({ type: '', text: '' });
+
+  // Load saved credentials on mount
+  useEffect(() => {
+    const savedEmail = localStorage.getItem('jiraEmail');
+    const savedToken = localStorage.getItem('jiraToken');
+
+    if (savedEmail && savedToken) {
+      setSavedCredentialsEmail(savedEmail);
+      setShowSavedCredentialsPrompt(true);
+    }
+  }, []);
+
   useEffect(() => {
     const newRoomId = Math.random().toString(36).substring(2, 8).toUpperCase();
     setGeneratedRoomId(newRoomId);
@@ -101,6 +117,45 @@ export default function CreateRoom({ setName }) {
       socket.off('room-created', handleRoomCreated);
     };
   }, [navigate, userNameState]);
+
+  // Function to load saved credentials
+  const loadSavedCredentials = () => {
+    const savedEmail = localStorage.getItem('jiraEmail');
+    const savedToken = localStorage.getItem('jiraToken');
+
+    if (savedEmail && savedToken) {
+      setJiraEmail(savedEmail);
+      setJiraToken(savedToken);
+      setEnableJira(true);
+      setShowSavedCredentialsPrompt(false);
+      setMessage({ type: 'success', text: '✓ Credentials loaded successfully!' });
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+    }
+  };
+
+  // Function to delete saved credentials
+  const deleteSavedCredentials = () => {
+    localStorage.removeItem('jiraEmail');
+    localStorage.removeItem('jiraToken');
+    setSavedCredentialsEmail('');
+    setShowSavedCredentialsPrompt(false);
+    setMessage({ type: 'success', text: '✓ Credentials deleted successfully!' });
+    setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+  };
+
+  // Function to save credentials manually
+  const handleSaveCredentials = () => {
+    if (jiraEmail.trim() && jiraToken.trim()) {
+      localStorage.setItem('jiraEmail', jiraEmail.trim());
+      localStorage.setItem('jiraToken', jiraToken.trim());
+      setSavedCredentialsEmail(jiraEmail.trim());
+      setMessage({ type: 'success', text: '✓ Credentials saved successfully!' });
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+    } else {
+      setMessage({ type: 'error', text: 'Please enter both email and token to save' });
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+    }
+  };
 
   const createRoom = (e) => {
     e.preventDefault();
@@ -228,6 +283,34 @@ export default function CreateRoom({ setName }) {
           </div>
         )}
 
+        {message.text && (
+          <div className={`message ${message.type}`}>
+            <span className="message-icon">{message.type === 'success' ? '✓' : '⚠️'}</span>
+            {message.text}
+          </div>
+        )}
+
+        {/* Saved Credentials Prompt */}
+        {showSavedCredentialsPrompt && (
+          <div className="saved-credentials-prompt">
+            <div className="prompt-content">
+              <div className="prompt-icon">💾</div>
+              <div className="prompt-text">
+                <strong>Saved credentials found!</strong>
+                <p>You have saved Jira credentials for: <span className="email-highlight">{savedCredentialsEmail}</span></p>
+              </div>
+              <div className="prompt-actions">
+                <button className="btn-load" onClick={loadSavedCredentials}>
+                  Load & Enable
+                </button>
+                <button className="btn-delete" onClick={deleteSavedCredentials}>
+                  <FaTrash /> Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <form onSubmit={createRoom} className="create-room-form">
           <div className="form-group">
             <label htmlFor="userName" className="form-label">
@@ -327,7 +410,7 @@ export default function CreateRoom({ setName }) {
                       className="toggle-token-visibility"
                       onClick={() => setShowJiraToken(!showJiraToken)}
                     >
-                      {showJiraToken ? '👁️' : '👁️‍🗨️'}
+                      {showJiraToken ? <FaEyeSlash /> : <FaEye />}
                     </button>
                   </div>
                   <div className="input-hint">
@@ -340,6 +423,16 @@ export default function CreateRoom({ setName }) {
                     </a>
                   </div>
                 </div>
+
+                {/* Save Credentials Button */}
+                <button
+                  type="button"
+                  className="save-credentials-btn"
+                  onClick={handleSaveCredentials}
+                  disabled={!jiraEmail.trim() || !jiraToken.trim()}
+                >
+                  <FaSave /> Save Credentials
+                </button>
               </div>
             )}
           </div>
