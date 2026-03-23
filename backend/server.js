@@ -138,7 +138,10 @@ io.on("connection", (socket) => {
       },
       jiraEmail: jiraEmail || null,
       jiraToken: jiraToken || null,
-      jiraConnected: jiraConnected
+      jiraConnected: jiraConnected,
+      // Add stories array for simple mode
+      stories: [],
+      currentStoryIndex: 0
     };
 
     // Store Jira client if created
@@ -164,10 +167,40 @@ io.on("connection", (socket) => {
       roomName: rooms[roomId].name,
       users: rooms[roomId].users,
       estimationScale: rooms[roomId].estimationScale,
-      jiraConnected: rooms[roomId].jiraConnected
+      jiraConnected: rooms[roomId].jiraConnected,
+      stories: rooms[roomId].stories,
+      currentStoryIndex: rooms[roomId].currentStoryIndex
     });
 
     console.log(`Room created: ${roomId} (${roomName}) by ${userName}`);
+  });
+
+  // Handle story updates (for simple mode)
+  socket.on("update-stories", ({ roomId, stories, currentStoryIndex }) => {
+    if (rooms[roomId] && rooms[roomId].admin === rooms[roomId].users[socket.id]) {
+      // Only admin can update stories
+      rooms[roomId].stories = stories;
+      rooms[roomId].currentStoryIndex = currentStoryIndex;
+
+      // Broadcast updated stories to all participants in the room
+      io.to(roomId).emit("stories-updated", {
+        stories: stories,
+        currentStoryIndex: currentStoryIndex
+      });
+
+      console.log(`Stories updated in room ${roomId}: ${stories.length} stories`);
+    }
+  });
+
+  // Handle request for current stories (when a user joins)
+  socket.on("request-stories", ({ roomId }) => {
+    if (rooms[roomId]) {
+      socket.emit("stories-updated", {
+        stories: rooms[roomId].stories || [],
+        currentStoryIndex: rooms[roomId].currentStoryIndex || 0
+      });
+      console.log(`Sent stories to joining user in room ${roomId}`);
+    }
   });
 
   // Handle join room
@@ -222,7 +255,15 @@ io.on("connection", (socket) => {
         roomName: rooms[roomId].name,
         users: rooms[roomId].users,
         estimationScale: rooms[roomId].estimationScale,
-        jiraConnected: rooms[roomId].jiraConnected
+        jiraConnected: rooms[roomId].jiraConnected,
+        stories: rooms[roomId].stories,
+        currentStoryIndex: rooms[roomId].currentStoryIndex
+      });
+
+      // Also send stories to the joining user
+      socket.emit("stories-updated", {
+        stories: rooms[roomId].stories || [],
+        currentStoryIndex: rooms[roomId].currentStoryIndex || 0
       });
 
       // Broadcast to all in room
@@ -234,7 +275,9 @@ io.on("connection", (socket) => {
         roomName: rooms[roomId].name,
         users: rooms[roomId].users,
         estimationScale: rooms[roomId].estimationScale,
-        jiraConnected: rooms[roomId].jiraConnected
+        jiraConnected: rooms[roomId].jiraConnected,
+        stories: rooms[roomId].stories,
+        currentStoryIndex: rooms[roomId].currentStoryIndex
       });
 
       console.log(`User ${userName} joined room: ${roomId}`);
@@ -561,7 +604,9 @@ io.on("connection", (socket) => {
         roomName: rooms[roomId].name,
         users: rooms[roomId].users,
         estimationScale: rooms[roomId].estimationScale,
-        jiraConnected: rooms[roomId].jiraConnected
+        jiraConnected: rooms[roomId].jiraConnected,
+        stories: rooms[roomId].stories,
+        currentStoryIndex: rooms[roomId].currentStoryIndex
       });
     }
   });
@@ -573,7 +618,9 @@ io.on("connection", (socket) => {
         roomName: rooms[roomId].name,
         users: rooms[roomId].users,
         estimationScale: rooms[roomId].estimationScale,
-        jiraConnected: rooms[roomId].jiraConnected
+        jiraConnected: rooms[roomId].jiraConnected,
+        stories: rooms[roomId].stories,
+        currentStoryIndex: rooms[roomId].currentStoryIndex
       });
     }
   });

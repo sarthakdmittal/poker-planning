@@ -217,6 +217,13 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
   }, [roomId, stories, currentStoryIndex, revealed, finalPoint, selectedCard,
       votedUsers, userVotes, results, users, observers, adminName, cards, scaleType, isLoading]);
 
+  // Request stories when joining
+  useEffect(() => {
+    if (roomId && !isLoading) {
+      socket.emit("request-stories", { roomId });
+    }
+  }, [roomId, isLoading]);
+
   // Socket event handlers
   useEffect(() => {
     if (roomId) {
@@ -233,6 +240,7 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
         socket.emit("getUsers", { roomId });
         socket.emit("requestObservers", { roomId });
         socket.emit("getCurrentAdmin", { roomId });
+        socket.emit("request-stories", { roomId });
       }
     };
 
@@ -270,6 +278,13 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
   }, [roomId, name, users]);
 
   useEffect(() => {
+    // Handle stories update from server
+    socket.on("stories-updated", ({ stories: updatedStories, currentStoryIndex: updatedIndex }) => {
+      console.log("Stories updated:", updatedStories);
+      setStories(updatedStories || []);
+      setCurrentStoryIndex(updatedIndex || 0);
+    });
+
     socket.on("users", (data) => {
       if (observingTarget && !Object.keys(data).includes(observingTarget)) {
         setObservingTarget(null);
@@ -289,6 +304,10 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
         if (scaleTypeFromServer && ESTIMATION_SCALES[scaleTypeFromServer]) {
           setScaleType(scaleTypeFromServer);
         }
+      }
+      if (data?.stories) {
+        setStories(data.stories);
+        setCurrentStoryIndex(data.currentStoryIndex || 0);
       }
     });
 
@@ -337,6 +356,7 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
     });
 
     return () => {
+      socket.off("stories-updated");
       socket.off("users");
       socket.off("currentAdmin");
       socket.off("roomInfo");
@@ -349,7 +369,18 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
     };
   }, [name, roomId, revealed, observingTarget, users]);
 
-  // Story management functions
+  // Broadcast stories to server when they change (admin only)
+  const broadcastStories = (updatedStories, updatedIndex) => {
+    if (isAdmin && roomId) {
+      socket.emit("update-stories", {
+        roomId,
+        stories: updatedStories,
+        currentStoryIndex: updatedIndex
+      });
+    }
+  };
+
+  // Story management functions with broadcast
   const handleAddStory = () => {
     if (newStoryTitle.trim()) {
       const newStory = {
@@ -359,24 +390,22 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
         point: null
       };
       const updatedStories = [...stories, newStory];
+      const newIndex = stories.length === 0 ? 0 : currentStoryIndex;
       setStories(updatedStories);
       setNewStoryTitle("");
       setNewStoryDescription("");
       setShowStoryInput(false);
 
-      // If this is the first story, set it as current
       if (stories.length === 0) {
         setCurrentStoryIndex(0);
       }
 
-      // Broadcast to all users that stories have been updated
-      socket.emit("roomInfo", { roomId });
+      broadcastStories(updatedStories, newIndex);
     }
   };
 
   const handleSelectStory = (index) => {
     if (revealed) {
-      // Reset voting state when switching stories
       setRevealed(false);
       setResults(null);
       setFinalPoint(null);
@@ -385,24 +414,29 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
       socket.emit("reset", { roomId });
     }
     setCurrentStoryIndex(index);
+    broadcastStories(stories, index);
   };
 
   const handleUpdateStoryPoint = (index, point) => {
     const updatedStories = [...stories];
     updatedStories[index].point = point;
     setStories(updatedStories);
+    broadcastStories(updatedStories, currentStoryIndex);
   };
 
   const handleDeleteStory = (index) => {
     const updatedStories = stories.filter((_, i) => i !== index);
-    setStories(updatedStories);
+    let newIndex = currentStoryIndex;
 
-    // Adjust current index if needed
     if (index === currentStoryIndex) {
-      setCurrentStoryIndex(Math.max(0, index - 1));
+      newIndex = Math.max(0, index - 1);
     } else if (index < currentStoryIndex) {
-      setCurrentStoryIndex(currentStoryIndex - 1);
+      newIndex = currentStoryIndex - 1;
     }
+
+    setStories(updatedStories);
+    setCurrentStoryIndex(newIndex);
+    broadcastStories(updatedStories, newIndex);
   };
 
   const handleEditStory = (index) => {
@@ -421,6 +455,7 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
         description: editDescription.trim()
       };
       setStories(updatedStories);
+      broadcastStories(updatedStories, currentStoryIndex);
       setEditingStory(false);
       setEditStoryIndex(null);
       setEditTitle("");
@@ -435,7 +470,7 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
     setEditDescription("");
   };
 
-  // Drag and drop handlers
+  // Drag and drop handlers with broadcast
   const handleDragStart = (e, index) => {
     if (!isAdmin) return;
     setDraggedItem(index);
@@ -468,16 +503,19 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
     const newStories = [...stories];
     const [draggedStory] = newStories.splice(draggedItem, 1);
     newStories.splice(dropIndex, 0, draggedStory);
-    setStories(newStories);
 
-    // Adjust current index
+    let newIndex = currentStoryIndex;
     if (draggedItem === currentStoryIndex) {
-      setCurrentStoryIndex(dropIndex);
+      newIndex = dropIndex;
     } else if (draggedItem < currentStoryIndex && dropIndex >= currentStoryIndex) {
-      setCurrentStoryIndex(currentStoryIndex - 1);
+      newIndex = currentStoryIndex - 1;
     } else if (draggedItem > currentStoryIndex && dropIndex <= currentStoryIndex) {
-      setCurrentStoryIndex(currentStoryIndex + 1);
+      newIndex = currentStoryIndex + 1;
     }
+
+    setStories(newStories);
+    setCurrentStoryIndex(newIndex);
+    broadcastStories(newStories, newIndex);
 
     setDraggedItem(null);
     setDragOverItem(null);
@@ -562,7 +600,7 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
 
   return (
     <div className={`poker-room ${stories.length > 0 ? 'with-sidebar' : ''}`}>
-      {/* Story Queue Sidebar - Show to everyone, not just admin */}
+      {/* Story Queue Sidebar - Show to everyone */}
       {stories.length > 0 && (
         <div className="story-queue-sidebar">
           <div className="story-queue-header">
