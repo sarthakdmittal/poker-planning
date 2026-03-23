@@ -1,151 +1,139 @@
-const JiraClient = require('jira-connector');
-require('dotenv/config');
+const axios = require("axios");
+require("dotenv/config");
 
-const jira = new JiraClient({
-  host: process.env.JIRA_URL.replace(/^https?:\/\//, ''),
-  basic_auth: {
-    email: process.env.JIRA_USERNAME,
-    api_token: process.env.JIRA_PASSWORD // Use API token here
+// =========================
+// 🔹 AXIOS INSTANCE
+// =========================
+const jira = axios.create({
+  baseURL: process.env.JIRA_URL, // e.g. https://jira.axway.com
+  headers: {
+    Authorization: `Bearer ${process.env.JIRA_PASSWORD}`, // PAT token
+    Accept: "application/json",
+    "Content-Type": "application/json"
   }
 });
 
-function updateJiraStoryPoints(issueKey, storyPoints) {
+// Optional: global error logging
+jira.interceptors.response.use(
+  res => res,
+  err => {
+    console.error("❌ JIRA ERROR:",
+      err.response?.status,
+      JSON.stringify(err.response?.data, null, 2)
+    );
+    return Promise.reject(err);
+  }
+);
+
+// =========================
+// 🔹 UPDATE STORY POINTS
+// =========================
+async function updateJiraStoryPoints(issueKey, storyPoints) {
   const payload = {
-    issueKey,
-    issue: {
-      fields: {
-        [process.env.JIRA_STORYPOINT_FIELD]: storyPoints
-      }
+    fields: {
+      [process.env.JIRA_STORYPOINT_FIELD]: storyPoints
     }
   };
-  console.log('Sending to Jira:', JSON.stringify(payload, null, 2));
-  return jira.issue.editIssue(payload)
-    .then(response => {
-      if (!response) {
-        console.log('Jira responded with 204 No Content (success, but no body)');
-      } else {
-        console.log('Jira update response:', response);
-      }
-      return response;
-    })
-    .catch(error => {
-      if (error && error.response) {
-        console.error('Jira update error:', error.response.status, error.response.data);
-      } else {
-        console.error('Jira update error:', error);
-      }
-      throw error;
-    });
+
+  console.log("Sending to Jira (story points):", JSON.stringify(payload, null, 2));
+
+  const res = await jira.put(`/rest/api/2/issue/${issueKey}`, payload);
+
+  if (res.status === 204) {
+    console.log("Jira responded with 204 No Content");
+  }
+
+  return res.data;
 }
 
-function updateJiraDescription(issueKey, description) {
+// =========================
+// 🔹 UPDATE DESCRIPTION
+// =========================
+async function updateJiraDescription(issueKey, description) {
   const payload = {
-    issueKey,
-    issue: {
-      fields: {
-        [process.env.JIRA_DESCRIPTION_FIELD]: description
-      }
+    fields: {
+      [process.env.JIRA_DESCRIPTION_FIELD || "description"]: description
     }
   };
-  console.log('Sending to Jira (description):', JSON.stringify(payload, null, 2));
-  return jira.issue.editIssue(payload)
-    .then(response => {
-      if (!response) {
-        console.log('Jira responded with 204 No Content (success, but no body)');
-      } else {
-        console.log('Jira update response:', response);
-      }
-      return response;
-    })
-    .catch(error => {
-      if (error && error.response) {
-        console.error('Jira update error:', error.response.status, error.response.data);
-      } else {
-        console.error('Jira update error:', error);
-      }
-      throw error;
-    });
+
+  console.log("Sending to Jira (description):", JSON.stringify(payload, null, 2));
+
+  const res = await jira.put(`/rest/api/2/issue/${issueKey}`, payload);
+
+  if (res.status === 204) {
+    console.log("Jira responded with 204 No Content");
+  }
+
+  return res.data;
 }
 
-function updateJiraAcceptanceCriteria(issueKey, acceptanceCriteria) {
+// =========================
+// 🔹 UPDATE ACCEPTANCE CRITERIA
+// =========================
+async function updateJiraAcceptanceCriteria(issueKey, acceptanceCriteria) {
   const payload = {
-    issueKey,
-    issue: {
-      fields: {
-        [process.env.JIRA_ACCEPTANCE_CRITERIA_FIELD]: acceptanceCriteria
-      }
+    fields: {
+      [process.env.JIRA_ACCEPTANCE_CRITERIA_FIELD]: acceptanceCriteria
     }
   };
-  console.log('Sending to Jira (acceptanceCriteria):', JSON.stringify(payload, null, 2));
-  return jira.issue.editIssue(payload)
-    .then(response => {
-      if (!response) {
-        console.log('Jira responded with 204 No Content (success, but no body)');
-      } else {
-        console.log('Jira update response:', response);
-      }
-      return response;
-    })
-    .catch(error => {
-      if (error && error.response) {
-        console.error('Jira update error:', error.response.status, error.response.data);
-      } else {
-        console.error('Jira update error:', error);
-      }
-      throw error;
-    });
+
+  console.log("Sending to Jira (acceptanceCriteria):", JSON.stringify(payload, null, 2));
+
+  const res = await jira.put(`/rest/api/2/issue/${issueKey}`, payload);
+
+  if (res.status === 204) {
+    console.log("Jira responded with 204 No Content");
+  }
+
+  return res.data;
 }
 
-// Get available transitions for an issue
+// =========================
+// 🔹 GET TRANSITIONS
+// =========================
 async function getJiraTransitions(issueKey) {
   try {
-    const transitions = await jira.issue.getTransitions({
-      issueKey: issueKey
-    });
-    console.log(`Available transitions for ${issueKey}:`, JSON.stringify(transitions, null, 2));
-    return transitions;
+    const res = await jira.get(`/rest/api/2/issue/${issueKey}/transitions`);
+
+    console.log(`Available transitions for ${issueKey}:`,
+      JSON.stringify(res.data, null, 2)
+    );
+
+    // Keep SAME structure as old code
+    return res.data;
+
   } catch (err) {
-    console.error('Failed to fetch Jira transitions:', err.message);
-    if (err.response) {
-      console.error('Jira API error response:', err.response.data);
-    }
+    console.error("Failed to fetch Jira transitions");
     return { transitions: [] };
   }
 }
 
-// Transition an issue to a new status
+// =========================
+// 🔹 TRANSITION ISSUE
+// =========================
 async function transitionJiraIssue(issueKey, transitionId) {
   const payload = {
-    issueKey,
-    transition: {
-      id: transitionId
-    }
+    transition: { id: transitionId }
   };
 
-  console.log('Sending transition to Jira:', JSON.stringify(payload, null, 2));
+  console.log("Sending transition to Jira:", JSON.stringify(payload, null, 2));
 
-  return jira.issue.transitionIssue(payload)
-    .then(response => {
-      console.log('Jira transition response:', response);
-      return response;
-    })
-    .catch(error => {
-      if (error && error.response) {
-        console.error('Jira transition error:', error.response.status, error.response.data);
-      } else {
-        console.error('Jira transition error:', error);
-      }
-      throw error;
-    });
+  await jira.post(
+    `/rest/api/2/issue/${issueKey}/transitions`,
+    payload
+  );
+
+  console.log("Jira transition successful");
 }
 
-// Map status names to transition IDs (you'll need to discover these for your project)
+// =========================
+// 🔹 GET TRANSITION ID
+// =========================
 async function getTransitionIdForStatus(issueKey, targetStatus) {
   try {
-    const transitions = await getJiraTransitions(issueKey);
+    const transitionsData = await getJiraTransitions(issueKey);
 
-    // Find the transition that leads to the target status
-    const transition = transitions.transitions.find(t =>
+    const transition = transitionsData.transitions.find(t =>
       t.to.name.toLowerCase() === targetStatus.toLowerCase()
     );
 
@@ -153,63 +141,63 @@ async function getTransitionIdForStatus(issueKey, targetStatus) {
       console.log(`Found transition for ${targetStatus}:`, transition);
       return transition.id;
     } else {
-      console.log(`No direct transition found for ${targetStatus}`);
-      console.log('Available transitions:', transitions.transitions.map(t => ({
-        id: t.id,
-        name: t.name,
-        to: t.to.name
-      })));
+      console.log(`No transition found for ${targetStatus}`);
+      console.log("Available transitions:",
+        transitionsData.transitions.map(t => ({
+          id: t.id,
+          name: t.name,
+          to: t.to.name
+        }))
+      );
       return null;
     }
   } catch (err) {
-    console.error('Failed to get transition ID:', err.message);
+    console.error("Failed to get transition ID:", err.message);
     return null;
   }
 }
 
-async function getJiraIssueSummary(issueKey) {
-  try {
-    const issue = await jira.issue.getIssue({ issueKey });
-    return issue.fields.summary;
-  } catch (err) {
-    console.error('Failed to fetch Jira issue summary:', err.message);
-    return null;
-  }
-}
-
+// =========================
+// 🔹 GET ISSUE DETAILS
+// =========================
 async function getJiraIssueDetails(issueKey) {
   try {
-    // Fetch the issue directly instead of using edit metadata
-    const issue = await jira.issue.getIssue({
-      issueKey,
-      fields: ['summary', 'description', 'status', 'issuetype', process.env.JIRA_ACCEPTANCE_CRITERIA_FIELD, process.env.JIRA_DESCRIPTION_FIELD]
+    const res = await jira.get(`/rest/api/2/issue/${issueKey}`, {
+      params: {
+        fields: [
+          "summary",
+          "description",
+          "status",
+          "issuetype",
+          process.env.JIRA_ACCEPTANCE_CRITERIA_FIELD,
+          process.env.JIRA_DESCRIPTION_FIELD
+        ].filter(Boolean).join(",")
+      }
     });
 
-    console.log('Jira API Response for issue:', issueKey, JSON.stringify(issue, null, 2));
+    const issue = res.data;
 
-    let desc = issue.fields[process.env.JIRA_DESCRIPTION_FIELD];
-    if (!desc || typeof desc !== 'string') {
-      desc = issue.fields.description;
-    }
-    let acceptanceCriteria = issue.fields[process.env.JIRA_ACCEPTANCE_CRITERIA_FIELD];
-    // Get status from the issue fields
-    const status = issue.fields.status?.name || "To Do";
-    const issueType = issue.fields.issuetype?.name;
-    const summary = issue.fields.summary;
+    // ✅ IMPORTANT: Preserve fallback logic
+    const descCustom = issue.fields[process.env.JIRA_DESCRIPTION_FIELD];
+    const desc =
+      descCustom && typeof descCustom === "string"
+        ? descCustom
+        : issue.fields.description;
+
+    const acceptanceCriteria =
+      issue.fields[process.env.JIRA_ACCEPTANCE_CRITERIA_FIELD];
 
     return {
-      summary: summary,
-      acceptanceCriteria: acceptanceCriteria,
+      summary: issue.fields.summary,
+      acceptanceCriteria,
       description: desc,
-      issueType: issueType,
-      status: status
+      issueType: issue.fields.issuetype?.name,
+      status: issue.fields.status?.name || "To Do"
     };
 
   } catch (err) {
-    console.error('Failed to fetch Jira issue details:', err.message);
-    if (err.response) {
-      console.error('Jira API error response:', err.response.data);
-    }
+    console.error("Failed to fetch Jira issue details");
+
     return {
       summary: null,
       acceptanceCriteria: null,
@@ -220,54 +208,82 @@ async function getJiraIssueDetails(issueKey) {
   }
 }
 
-async function getJiraDescription(issueKey) {
+// =========================
+// 🔹 GET SUMMARY
+// =========================
+async function getJiraIssueSummary(issueKey) {
   try {
-    const issue = await jira.issue.getIssue({ issueKey });
-    let desc = issue.fields[process.env.JIRA_DESCRIPTION_FIELD];
-    if (typeof desc !== 'string') desc = issue.fields.description;
-    console.log('DEBUG: getJiraDescription for', issueKey, '->', desc);
-    return desc;
+    const res = await jira.get(`/rest/api/2/issue/${issueKey}`);
+    return res.data.fields.summary;
   } catch (err) {
-    console.error('Failed to fetch Jira description:', err.message);
+    console.error("Failed to fetch Jira issue summary");
     return null;
   }
 }
 
-// Update the updateJiraStatus function to use transitions
+// =========================
+// 🔹 GET DESCRIPTION
+// =========================
+async function getJiraDescription(issueKey) {
+  try {
+    const res = await jira.get(`/rest/api/2/issue/${issueKey}`);
+
+    const fields = res.data.fields;
+
+    const descCustom = fields[process.env.JIRA_DESCRIPTION_FIELD];
+    const desc =
+      descCustom && typeof descCustom === "string"
+        ? descCustom
+        : fields.description;
+
+    console.log("DEBUG description:", desc);
+
+    return desc;
+
+  } catch (err) {
+    console.error("Failed to fetch Jira description");
+    return null;
+  }
+}
+
+// =========================
+// 🔹 UPDATE STATUS
+// =========================
 async function updateJiraStatus(issueKey, targetStatus) {
   try {
-    // First, get the transition ID for the target status
     const transitionId = await getTransitionIdForStatus(issueKey, targetStatus);
 
     if (!transitionId) {
       throw new Error(`No transition found to status: ${targetStatus}`);
     }
 
-    // Perform the transition
     await transitionJiraIssue(issueKey, transitionId);
 
-    // Verify the new status
-    const updatedIssue = await jira.issue.getIssue({ issueKey });
-    return updatedIssue.fields.status.name;
+    const updated = await jira.get(`/rest/api/2/issue/${issueKey}`);
+    return updated.data.fields.status.name;
 
   } catch (err) {
-    console.error('Failed to update Jira status:', err.message);
+    console.error("Failed to update Jira status:", err.message);
     throw err;
   }
 }
 
-// Add function to get status
+// =========================
+// 🔹 GET STATUS
+// =========================
 async function getJiraIssueStatus(issueKey) {
   try {
-    const issue = await jira.issue.getIssue({ issueKey });
-    return issue.fields.status?.name || "To Do";
+    const res = await jira.get(`/rest/api/2/issue/${issueKey}`);
+    return res.data.fields.status?.name || "To Do";
   } catch (err) {
-    console.error('Failed to fetch Jira issue status:', err.message);
+    console.error("Failed to fetch Jira issue status");
     return "To Do";
   }
 }
 
-// Export ALL functions at the end
+// =========================
+// 🔹 EXPORTS
+// =========================
 module.exports = {
   updateJiraStoryPoints,
   updateJiraDescription,
