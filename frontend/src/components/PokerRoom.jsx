@@ -496,26 +496,25 @@ export default function PokerRoom({ name, onLeaveRoom }) {
   const [issueType, setIssueType] = useState(null);
   const [copied, setCopied] = useState(false);
   const [storyStatus, setStoryStatus] = useState(""); // Tracks the current story status
-  // Add these with your other useState declarations
   const [availableTransitions, setAvailableTransitions] = useState([]);
   const [isLoadingTransitions, setIsLoadingTransitions] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  // Observer mode states
   const [observers, setObservers] = useState({});
   const [observingTarget, setObservingTarget] = useState(null);
   const [userVotes, setUserVotes] = useState({});
   const [isReconnecting, setIsReconnecting] = useState(true);
-  // Add this near your other useState declarations
   const [roomName, setRoomName] = useState("");
-  // Add this with your other useState declarations
   const [roomIdCopied, setRoomIdCopied] = useState(false);
   const [showDropZone, setShowDropZone] = useState(false);
   const [draggedStory, setDraggedStory] = useState(null);
-  // Add this state to store details for ALL stories
   const [allStoryDetails, setAllStoryDetails] = useState({});
-  // Add estimation scale state
   const [cards, setCards] = useState([0, 1, 2, 3, 5, 8, 13, 21]); // Default Fibonacci
   const [scaleType, setScaleType] = useState('FIBONACCI');
+  const [jiraConnected, setJiraConnected] = useState(false); // Add Jira connection status
+
+  // Refs for editors
+  const acceptanceEditorRef = useRef(null);
+  const descriptionEditorRef = useRef(null);
 
   const storyStatuses = [
     "To Do",
@@ -662,7 +661,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
 
   // Fetch details for all stories when storyList changes
   useEffect(() => {
-    if (storyList.length > 0 && roomId) {
+    if (storyList.length > 0 && roomId && jiraConnected) {
       console.log("Fetching details for all stories:", storyList);
 
       // Request details for all stories at once
@@ -671,7 +670,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
         issueKeys: storyList
       });
     }
-  }, [storyList, roomId]);
+  }, [storyList, roomId, jiraConnected]);
 
   // Try to recover admin from localStorage
   useEffect(() => {
@@ -767,11 +766,11 @@ export default function PokerRoom({ name, onLeaveRoom }) {
       });
 
       // If we have a jiraKey from localStorage, fetch fresh details
-      if (jiraKey) {
+      if (jiraKey && jiraConnected) {
         socket.emit("fetchJiraDetails", { roomId, jiraKey });
       }
     }
-  }, [roomId, name]);
+  }, [roomId, name, jiraConnected]);
 
   useEffect(() => {
     console.log("Socket connected?", socket.connected);
@@ -784,7 +783,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
         socket.emit("getCurrentAdmin", { roomId });
 
         // Re-fetch Jira details on reconnect if we have a jiraKey
-        if (jiraKey) {
+        if (jiraKey && jiraConnected) {
           socket.emit("fetchJiraDetails", { roomId, jiraKey });
         }
       }
@@ -795,9 +794,37 @@ export default function PokerRoom({ name, onLeaveRoom }) {
     return () => {
       socket.off("connect", onConnect);
     };
-  }, [roomId, jiraKey]);
+  }, [roomId, jiraKey, jiraConnected]);
 
-  // Add loading state management - UPDATED
+  // Add Jira error listener
+  useEffect(() => {
+    const handleJiraError = ({ message }) => {
+      console.error("Jira error:", message);
+      // Show error to user
+      const errorDiv = document.createElement('div');
+      errorDiv.className = 'error-message';
+      errorDiv.style.position = 'fixed';
+      errorDiv.style.top = '20px';
+      errorDiv.style.right = '20px';
+      errorDiv.style.zIndex = '1000';
+      errorDiv.style.backgroundColor = '#f44336';
+      errorDiv.style.color = 'white';
+      errorDiv.style.padding = '12px 20px';
+      errorDiv.style.borderRadius = '4px';
+      errorDiv.style.boxShadow = '0 2px 10px rgba(0,0,0,0.2)';
+      errorDiv.innerHTML = `⚠️ ${message}`;
+      document.body.appendChild(errorDiv);
+      setTimeout(() => errorDiv.remove(), 5000);
+    };
+
+    socket.on("jiraError", handleJiraError);
+
+    return () => {
+      socket.off("jiraError", handleJiraError);
+    };
+  }, []);
+
+  // Add loading state management
   useEffect(() => {
     if (!roomId) return;
 
@@ -902,18 +929,24 @@ export default function PokerRoom({ name, onLeaveRoom }) {
       }
     });
 
-    // In PokerRoom.jsx, find the roomInfo listener and update it:
-
     // In PokerRoom.jsx, find the roomInfo listener and update it with more detailed logging:
-
     socket.on("roomInfo", (data) => {
       console.log("===== ROOM INFO RECEIVED =====");
       console.log("Full room info data:", data);
       console.log("Room name:", data?.roomName);
       console.log("Estimation scale:", data?.estimationScale);
+      console.log("Jira connected:", data?.jiraConnected);
 
       if (data && data.roomName) {
         setRoomName(data.roomName);
+      }
+
+      // Update Jira connection status
+      if (data && data.jiraConnected !== undefined) {
+        setJiraConnected(data.jiraConnected);
+        if (!data.jiraConnected) {
+          console.log("⚠️ Jira not connected for this room");
+        }
       }
 
       // Update cards based on room's estimation scale
@@ -984,6 +1017,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
       console.log("Room joined confirmation:", data);
       // Optionally do something with this data
     });
+
     // Listen for multiple Jira details
     socket.on("multipleJiraDetails", ({ roomId: responseRoomId, results }) => {
       if (responseRoomId === roomId) {
@@ -997,6 +1031,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
         localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
       }
     });
+
     socket.on("reveal", (data) => {
       setResults(data);
       setRevealed(true);
@@ -1108,18 +1143,6 @@ export default function PokerRoom({ name, onLeaveRoom }) {
       }
     });
 
-    socket.on("observersUpdate", (observerData) => {
-      console.log("Received observers update:", observerData);
-      setObservers(observerData);
-
-      const currentUserId = Object.keys(users).find(uid => users[uid] === name);
-      if (currentUserId && observerData[currentUserId]) {
-        console.log("Current user is now an observer, clearing vote");
-        setSelectedCard(null);
-        socket.emit("vote", { roomId, point: null });
-      }
-    });
-
     socket.on("jiraTransitions", (data) => {
       console.log("Received transitions:", data);
       if (data && data.transitions) {
@@ -1142,12 +1165,12 @@ export default function PokerRoom({ name, onLeaveRoom }) {
       socket.off("observersUpdate");
       socket.off("room-joined");
       socket.off("voteUpdate");
-      socket.off("observersUpdate");
       socket.off("roomInfo");
       socket.off("jiraTransitions");
       socket.off("currentAdmin");
+      socket.off("jiraError");
     };
-  }, [name, users, roomId, jiraKey, revealed]);
+  }, [name, users, roomId, jiraKey, revealed, isReconnecting, jiraConnected]);
 
   const isAdmin = name && adminName && name === adminName;
 
@@ -1162,10 +1185,10 @@ export default function PokerRoom({ name, onLeaveRoom }) {
   }, [storyList, currentStoryIndex]);
 
   useEffect(() => {
-    if (jiraKey && roomId) {
+    if (jiraKey && roomId && jiraConnected) {
       socket.emit("fetchJiraDetails", { roomId, jiraKey });
     }
-  }, [jiraKey, roomId]);
+  }, [jiraKey, roomId, jiraConnected]);
 
   useEffect(() => {
     setSelectedCard(null);
@@ -1232,8 +1255,8 @@ export default function PokerRoom({ name, onLeaveRoom }) {
         socket.emit("requestObservers", { roomId });
         socket.emit("getCurrentAdmin", { roomId });
 
-        // Re-fetch Jira details if we have a jiraKey
-        if (jiraKey) {
+        // Re-fetch Jira details if we have a jiraKey and Jira is connected
+        if (jiraKey && jiraConnected) {
           socket.emit("fetchJiraDetails", { roomId, jiraKey });
         }
       }, 500);
@@ -1255,7 +1278,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
       socket.off("connect", handleReconnect);
       socket.off("reconnect", handleReconnect);
     };
-  }, [roomId, name, jiraKey]);
+  }, [roomId, name, jiraKey, jiraConnected]);
 
   // Drag and drop handlers for loading stories
   useEffect(() => {
@@ -1344,7 +1367,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
   };
 
   const fetchAvailableTransitions = (key) => {
-    if (!key || !isAdmin || !roomId) return;
+    if (!key || !isAdmin || !roomId || !jiraConnected) return;
 
     console.log(`Fetching transitions for ${key}`);
     setIsLoadingTransitions(true);
@@ -1514,7 +1537,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
   const handleStatusChange = (e) => {
     const newStatus = e.target.value;
     setStoryStatus(newStatus);
-    if (jiraKey) {
+    if (jiraKey && jiraConnected) {
       socket.emit("updateStoryStatus", {
         roomId,
         jiraKey,
@@ -1576,7 +1599,9 @@ export default function PokerRoom({ name, onLeaveRoom }) {
             const selectedKey = storyList[index];
             if (selectedKey) {
               setJiraKey(selectedKey);
-              socket.emit("fetchJiraDetails", { roomId, jiraKey: selectedKey });
+              if (jiraConnected) {
+                socket.emit("fetchJiraDetails", { roomId, jiraKey: selectedKey });
+              }
             }
             socket.emit("reset", { roomId });
           }}
@@ -1585,12 +1610,14 @@ export default function PokerRoom({ name, onLeaveRoom }) {
             setStoryList([...storyList, ...keys]);
 
             // Immediately fetch details for the new stories
-            setTimeout(() => {
-              socket.emit("fetchMultipleJiraDetails", {
-                roomId,
-                issueKeys: keys
-              });
-            }, 100);
+            if (jiraConnected) {
+              setTimeout(() => {
+                socket.emit("fetchMultipleJiraDetails", {
+                  roomId,
+                  issueKeys: keys
+                });
+              }, 100);
+            }
           }}
           onRemoveStory={(index) => {
             const removedKey = storyList[index];
@@ -1675,13 +1702,18 @@ export default function PokerRoom({ name, onLeaveRoom }) {
             {roomName && <span className="room-name-badge">{roomName}</span>}
           </div>
           <div className="header-actions">
+            {!jiraConnected && storyList.length > 0 && (
+              <div className="jira-warning-badge" title="Jira integration is not enabled for this room">
+                ⚠️ Jira Disabled
+              </div>
+            )}
             {isCurrentUserObserver && (
               <div className="observer-badge">
                 <FaUserSecret className="observer-badge-icon" />
                 <span>Observer Mode</span>
               </div>
             )}
-            {jiraKey && (
+            {jiraKey && jiraConnected && (
               <div className="story-badge" onClick={() => copyToClipboard(jiraKey)} title="Click to copy Jira key">
                 <span className="story-key">{jiraKey}</span>
                 {copied ? <FaCopy className="copy-icon copied" /> : <FaRegCopy className="copy-icon" />}
@@ -1692,7 +1724,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
             </button>
           </div>
         </div>
-        {/* 👇 ADD THE RECONNECTING MESSAGE HERE - right after header and before Observing Target Indicator */}
+        {/* Reconnecting Message */}
         {isReconnecting && (
           <div className="reconnecting-message">
             <div className="spinner"></div>
@@ -1794,6 +1826,9 @@ export default function PokerRoom({ name, onLeaveRoom }) {
           <div className="story-card">
             <div className="story-card-header">
               <span className="story-type">{issueType || 'Story'}</span>
+              {!jiraConnected && storyList.length > 0 && (
+                <span className="jira-disabled-badge">Jira integration disabled</span>
+              )}
               {storyList.length > 0 && (
                 <div className="story-progress-container">
                   <button
@@ -1852,35 +1887,37 @@ export default function PokerRoom({ name, onLeaveRoom }) {
             </div>
             <h2 className="story-title">{issueTitle || 'Loading story...'}</h2>
 
-            <div className="story-status-dropdown">
-              <label htmlFor="story-status-select">Status: </label>
-              {isLoadingTransitions ? (
-                <select disabled>
-                  <option>Loading transitions...</option>
-                </select>
-              ) : (
-                <select
-                  id="story-status-select"
-                  value={storyStatus}
-                  onChange={handleStatusChange}
-                  onClick={() => {
-                    // Fetch transitions when dropdown is clicked
-                    if (jiraKey && isAdmin) {
-                      fetchAvailableTransitions(jiraKey);
-                    }
-                  }}
-                  disabled={isCurrentUserObserver || !isAdmin }
-                >
-                  {availableTransitions.length > 0 ? (
-                    availableTransitions.map(status => (
-                      <option key={status} value={status}>{status}</option>
-                    ))
-                  ) : (
-                    <option value={storyStatus}>{storyStatus}</option>
-                  )}
-                </select>
-              )}
-            </div>
+            {jiraConnected && (
+              <div className="story-status-dropdown">
+                <label htmlFor="story-status-select">Status: </label>
+                {isLoadingTransitions ? (
+                  <select disabled>
+                    <option>Loading transitions...</option>
+                  </select>
+                ) : (
+                  <select
+                    id="story-status-select"
+                    value={storyStatus}
+                    onChange={handleStatusChange}
+                    onClick={() => {
+                      // Fetch transitions when dropdown is clicked
+                      if (jiraKey && isAdmin && jiraConnected) {
+                        fetchAvailableTransitions(jiraKey);
+                      }
+                    }}
+                    disabled={isCurrentUserObserver || !isAdmin}
+                  >
+                    {availableTransitions.length > 0 ? (
+                      availableTransitions.map(status => (
+                        <option key={status} value={status}>{status}</option>
+                      ))
+                    ) : (
+                      <option value={storyStatus}>{storyStatus}</option>
+                    )}
+                  </select>
+                )}
+              </div>
+            )}
 
             <div className="story-actions">
               {acceptanceCriteria && (
@@ -1916,7 +1953,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
               <div className="story-content">
                 <div className="content-header">
                   <strong>Acceptance Criteria</strong>
-                  {isAdmin && !editingAcceptance && !editingAcceptanceVisual && !isCurrentUserObserver && (
+                  {isAdmin && !editingAcceptance && !editingAcceptanceVisual && !isCurrentUserObserver && jiraConnected && (
                     <div className="edit-buttons">
                       <button
                         className="edit-btn"
@@ -2060,7 +2097,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
               <div className="story-content">
                 <div className="content-header">
                   <strong>Description</strong>
-                  {isAdmin && !editingDescription && !editingDescriptionVisual && !isCurrentUserObserver && (
+                  {isAdmin && !editingDescription && !editingDescriptionVisual && !isCurrentUserObserver && jiraConnected && (
                     <div className="edit-buttons">
                       <button
                         className="edit-btn"
@@ -2471,6 +2508,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
                       value={jiraKey}
                       onChange={e => setJiraKey(e.target.value)}
                       className="jira-input"
+                      disabled={!jiraConnected}
                     />
                   )}
                   <div className="point-input-group">
@@ -2492,6 +2530,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
                     <button
                       className="btn-finalize"
                       onClick={handleFinalize}
+                      disabled={!jiraConnected && storyList.length === 0}
                     >
                       <FaStar /> Finalize {customPoint}
                     </button>

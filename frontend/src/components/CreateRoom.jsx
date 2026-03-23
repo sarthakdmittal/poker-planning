@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { socket } from "../socket";
 import { FaCopy, FaRegCopy } from "react-icons/fa";
 
-// Define ESTIMATION_SCALES directly in this file
+// Define ESTIMATION_SCALES
 const ESTIMATION_SCALES = {
   FIBONACCI: {
     name: 'Fibonacci',
@@ -48,6 +48,12 @@ export default function CreateRoom({ setName }) {
   const [selectedScale, setSelectedScale] = useState('FIBONACCI');
   const [customScaleInput, setCustomScaleInput] = useState('');
   const [showCustomScaleInput, setShowCustomScaleInput] = useState(false);
+
+  // Jira integration state
+  const [enableJira, setEnableJira] = useState(false);
+  const [jiraEmail, setJiraEmail] = useState('');
+  const [jiraToken, setJiraToken] = useState('');
+  const [showJiraToken, setShowJiraToken] = useState(false);
 
   useEffect(() => {
     const newRoomId = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -115,12 +121,28 @@ export default function CreateRoom({ setName }) {
       return;
     }
 
+    // Validate Jira credentials if enabled
+    if (enableJira) {
+      if (!jiraEmail.trim() || !jiraToken.trim()) {
+        setError('Please provide Jira email and API token');
+        setIsLoading(false);
+        return;
+      }
+
+      // Basic email validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(jiraEmail.trim())) {
+        setError('Please enter a valid email address');
+        setIsLoading(false);
+        return;
+      }
+    }
+
     // Validate custom scale if selected
     let cards;
     if (selectedScale === 'CUSTOM') {
       cards = customScaleInput.split(',').map(item => {
         const trimmed = item.trim();
-        // Try to parse as number, if fails keep as string
         const num = Number(trimmed);
         return isNaN(num) ? trimmed : num;
       });
@@ -136,8 +158,8 @@ export default function CreateRoom({ setName }) {
 
     setUserNameState(userName);
 
-    // Include scale information in room creation
-    socket.emit('create-room', {
+    // Prepare room data
+    const roomData = {
       userName,
       roomName,
       roomId: generatedRoomId,
@@ -145,8 +167,15 @@ export default function CreateRoom({ setName }) {
         type: selectedScale,
         cards: cards
       }
-    });
+    };
 
+    // Add Jira credentials if enabled
+    if (enableJira) {
+      roomData.jiraEmail = jiraEmail.trim();
+      roomData.jiraToken = jiraToken.trim();
+    }
+
+    socket.emit('create-room', roomData);
     setName(userName);
   };
 
@@ -167,7 +196,6 @@ export default function CreateRoom({ setName }) {
     setSelectedScale(scale);
     setShowCustomScaleInput(scale === 'CUSTOM');
 
-    // Pre-fill custom scale with Fibonacci as example
     if (scale === 'CUSTOM') {
       setCustomScaleInput('0, 1, 2, 3, 5, 8, 13, 21');
     }
@@ -235,6 +263,85 @@ export default function CreateRoom({ setName }) {
               maxLength={50}
             />
             <div className="input-hint">Give your session a descriptive name</div>
+          </div>
+
+          {/* Jira Integration Section */}
+          <div className="form-group jira-integration-group">
+            <label className="form-label">
+              <span className="label-icon">🔌</span>
+              Jira Integration (Optional)
+            </label>
+            <div className="jira-toggle">
+              <label className="toggle-switch">
+                <input
+                  type="checkbox"
+                  checked={enableJira}
+                  onChange={(e) => setEnableJira(e.target.checked)}
+                />
+                <span className="toggle-slider"></span>
+              </label>
+              <span className="toggle-label">
+                {enableJira ? 'Jira integration enabled' : 'Enable Jira integration'}
+              </span>
+            </div>
+            <div className="input-hint">
+              Enable to automatically update Jira issues after voting
+            </div>
+
+            {enableJira && (
+              <div className="jira-credentials">
+                <div className="credential-field">
+                  <label htmlFor="jiraEmail" className="credential-label">
+                    Jira Email Address
+                  </label>
+                  <input
+                    id="jiraEmail"
+                    type="email"
+                    value={jiraEmail}
+                    onChange={(e) => setJiraEmail(e.target.value)}
+                    placeholder="your-email@company.com"
+                    className="form-input"
+                    required={enableJira}
+                  />
+                  <div className="input-hint">
+                    Your Atlassian account email
+                  </div>
+                </div>
+
+                <div className="credential-field">
+                  <label htmlFor="jiraToken" className="credential-label">
+                    API Token
+                  </label>
+                  <div className="token-input-wrapper">
+                    <input
+                      id="jiraToken"
+                      type={showJiraToken ? "text" : "password"}
+                      value={jiraToken}
+                      onChange={(e) => setJiraToken(e.target.value)}
+                      placeholder="Enter your API token"
+                      className="form-input"
+                      required={enableJira}
+                    />
+                    <button
+                      type="button"
+                      className="toggle-token-visibility"
+                      onClick={() => setShowJiraToken(!showJiraToken)}
+                    >
+                      {showJiraToken ? '👁️' : '👁️‍🗨️'}
+                    </button>
+                  </div>
+                  <div className="input-hint">
+                    <a
+                      href="https://id.atlassian.com/manage-profile/security/api-tokens"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      How to get your API token
+                    </a>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Estimation Scale Selection */}

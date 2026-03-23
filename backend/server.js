@@ -3,29 +3,35 @@ const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
 const {
+  createJiraClient,
   updateJiraStoryPoints,
   updateJiraDescription,
   getJiraIssueDetails,
   updateJiraAcceptanceCriteria,
   updateJiraStatus,
-} = require("./jira");
+  getJiraTransitions
+} = require("./jira-api");
 
 const app = express();
 app.use(cors({
   origin: [
     "http://localhost:3000",
+    "http://localhost:5173",
     "https://your-vercel-app.vercel.app"
   ],
   credentials: true
 }));
+
 app.get("/", (req, res) => {
   res.send("Server is running");
 });
+
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: [
       "http://localhost:3000",
+      "http://localhost:5173",
       "https://your-vercel-app.vercel.app"
     ],
     methods: ["GET", "POST"],
@@ -35,77 +41,86 @@ const io = new Server(server, {
   allowEIO3: true
 });
 
-// Store multiple rooms
+// Store rooms in memory
 let rooms = {};
 
-// Add connection logging
+// Store Jira clients per room
+const jiraClients = new Map();
+
+// Helper function to get Jira client for a room
+function getJiraClientForRoom(roomId) {
+  return jiraClients.get(roomId);
+}
+
 io.on("connection", (socket) => {
   console.log(`New client connected: ${socket.id}`);
 
   socket.on("disconnect", (reason) => {
     console.log(`Client disconnected: ${socket.id}, reason: ${reason}`);
+
+    Object.keys(rooms).forEach(roomId => {
+      if (rooms[roomId].users[socket.id]) {
+        const leavingName = rooms[roomId].users[socket.id];
+        const wasAdmin = rooms[roomId].admin === leavingName;
+
+        // Remove the user
+        delete rooms[roomId].users[socket.id];
+        delete rooms[roomId].votes[socket.id];
+        delete rooms[roomId].observers[socket.id];
+
+        // If admin left, mark disconnection
+        if (wasAdmin) {
+          console.log(`Admin ${leavingName} left room ${roomId}`);
+          rooms[roomId].adminDisconnected = true;
+        }
+
+        // Emit updates
+        io.to(roomId).emit("users", rooms[roomId].users);
+        io.to(roomId).emit("admin", rooms[roomId].admin);
+        io.to(roomId).emit("observersUpdate", rooms[roomId].observers);
+        io.to(roomId).emit("roomInfo", {
+          roomId: roomId,
+          roomName: rooms[roomId].name,
+          users: rooms[roomId].users,
+          estimationScale: rooms[roomId].estimationScale,
+          jiraConnected: rooms[roomId].jiraConnected
+        });
+
+        // Clean up empty rooms after 5 minutes
+        if (Object.keys(rooms[roomId].users).length === 0) {
+          setTimeout(() => {
+            if (rooms[roomId] && Object.keys(rooms[roomId].users).length === 0) {
+              // Clean up Jira client
+              jiraClients.delete(roomId);
+              delete rooms[roomId];
+              console.log(`Room ${roomId} deleted (empty)`);
+            }
+          }, 5 * 60 * 1000);
+        }
+      }
+    });
   });
 
-  socket.on("connect_error", (error) => {
-    console.error(`Connection error for socket ${socket.id}:`, error);
-  });
-
-  // Update getUsers handler
-  socket.on("getUsers", ({ roomId }) => {
-    console.log(`getUsers called for room: ${roomId} by socket: ${socket.id}`);
-    if (rooms[roomId]) {
-      socket.emit("users", rooms[roomId].users);
-      socket.emit("roomInfo", {
-        roomId: roomId,
-        roomName: rooms[roomId].name,
-        users: rooms[roomId].users,
-        estimationScale: rooms[roomId].estimationScale
-      });
-    } else {
-      socket.emit("users", {});
-    }
-  });
-
-  socket.on("requestCurrentStory", ({ roomId }) => {
-    if (rooms[roomId] && rooms[roomId].currentStoryData) {
-      const storyData = rooms[roomId].currentStoryData;
-      socket.emit("jiraDetails", {
-        summary: storyData.issueTitle,
-        acceptanceCriteria: storyData.acceptanceCriteria,
-        description: storyData.description,
-        issueType: storyData.issueType,
-        status: storyData.storyStatus
-      });
-    }
-  });
-
-  socket.on("getRoomInfo", ({ roomId }) => {
-    if (rooms[roomId]) {
-      console.log(`===== GET ROOM INFO for ${roomId} =====`);
-      console.log("Room exists:", !!rooms[roomId]);
-      console.log("Room estimationScale:", rooms[roomId].estimationScale);
-
-      const response = {
-        roomId: roomId,
-        roomName: rooms[roomId].name,
-        users: rooms[roomId].users,
-        estimationScale: rooms[roomId].estimationScale
-      };
-
-      console.log("Sending response:", response);
-      socket.emit("roomInfo", response);
-      console.log("===== END GET ROOM INFO =====");
-    }
-  });
-
-  // Handle room creation
-  socket.on("create-room", ({ userName, roomName, roomId, estimationScale }) => {
+  // Handle room creation with Jira credentials
+  socket.on("create-room", ({ userName, roomName, roomId, estimationScale, jiraEmail, jiraToken }) => {
     console.log("===== CREATE ROOM =====");
-    console.log("Received estimationScale:", estimationScale);
-    console.log("Received estimationScale type:", estimationScale?.type);
-    console.log("Received estimationScale cards:", estimationScale?.cards);
+    console.log("Jira credentials provided:", !!jiraEmail && !!jiraToken);
 
-    // Create new room
+    // Create Jira client if credentials provided
+    let jiraClient = null;
+    let jiraConnected = false;
+
+    if (jiraEmail && jiraToken) {
+      try {
+        jiraClient = createJiraClient(jiraEmail, jiraToken);
+        jiraConnected = true;
+        console.log(`✅ Jira client created for room ${roomId}`);
+      } catch (error) {
+        console.error(`❌ Failed to create Jira client:`, error.message);
+      }
+    }
+
+    // Create room
     rooms[roomId] = {
       name: roomName,
       users: {},
@@ -116,29 +131,31 @@ io.on("connection", (socket) => {
       observers: {},
       createdBy: socket.id,
       createdAt: new Date().toISOString(),
-      // Store the admin's socket ID for tracking disconnection
       adminSocketId: socket.id,
-      // Store estimation scale
       estimationScale: estimationScale || {
         type: 'FIBONACCI',
         cards: [0, 1, 2, 3, 5, 8, 13, 21]
-      }
+      },
+      jiraEmail: jiraEmail || null,
+      jiraToken: jiraToken || null,
+      jiraConnected: jiraConnected
     };
 
-    console.log("Stored estimationScale in room:", rooms[roomId].estimationScale);
-    console.log("===== END CREATE ROOM =====");
+    // Store Jira client if created
+    if (jiraClient) {
+      jiraClients.set(roomId, jiraClient);
+    }
 
-    // Join the socket to the room
-    socket.join(roomId);
-
-    // Add user to the room
+    // Add creator to room
     rooms[roomId].users[socket.id] = userName;
     rooms[roomId].observers[socket.id] = false;
 
-    // Send confirmation to the creator
+    socket.join(roomId);
+
+    // Send confirmation
     socket.emit("room-created", { roomId, roomName });
 
-    // Emit room data including estimation scale
+    // Broadcast room data
     io.to(roomId).emit("users", rooms[roomId].users);
     io.to(roomId).emit("admin", rooms[roomId].admin);
     io.to(roomId).emit("observersUpdate", rooms[roomId].observers);
@@ -146,21 +163,20 @@ io.on("connection", (socket) => {
       roomId: roomId,
       roomName: rooms[roomId].name,
       users: rooms[roomId].users,
-      estimationScale: rooms[roomId].estimationScale
+      estimationScale: rooms[roomId].estimationScale,
+      jiraConnected: rooms[roomId].jiraConnected
     });
 
-    console.log(`Room created: ${roomId} (${roomName}) by ${userName} with scale: ${estimationScale?.type || 'FIBONACCI'}`);
+    console.log(`Room created: ${roomId} (${roomName}) by ${userName}`);
   });
 
-  // Handle joining existing room
+  // Handle join room
   socket.on("join-room", ({ userName, roomId }) => {
     roomId = roomId.toUpperCase();
     console.log(`Join-room attempt: ${userName} trying to join ${roomId}`);
 
     if (rooms[roomId]) {
-      const currentAdmin = rooms[roomId].admin;
-
-      // Check if user is already in the room
+      // Check if user already exists
       const existingUserId = Object.keys(rooms[roomId].users).find(
         id => rooms[roomId].users[id] === userName
       );
@@ -178,9 +194,10 @@ io.on("connection", (socket) => {
         if (oldVote !== undefined) rooms[roomId].votes[socket.id] = oldVote;
         rooms[roomId].observers[socket.id] = oldObserverStatus || false;
 
-        // If this was the admin reconnecting, update their socket ID
+        // If this was the admin reconnecting
         if (userName === rooms[roomId].admin) {
           rooms[roomId].adminSocketId = socket.id;
+          rooms[roomId].adminDisconnected = false;
         }
       } else if (!existingUserId) {
         // New user
@@ -188,14 +205,9 @@ io.on("connection", (socket) => {
         rooms[roomId].observers[socket.id] = false;
       }
 
-      // Preserve admin (don't change it)
-      if (currentAdmin) {
-        rooms[roomId].admin = currentAdmin;
-      }
-
       socket.join(roomId);
 
-      // Send all necessary data to the joining client including estimation scale
+      // Send data to joining client
       socket.emit("room-joined", {
         roomId,
         roomName: rooms[roomId].name,
@@ -209,7 +221,8 @@ io.on("connection", (socket) => {
         roomId: roomId,
         roomName: rooms[roomId].name,
         users: rooms[roomId].users,
-        estimationScale: rooms[roomId].estimationScale
+        estimationScale: rooms[roomId].estimationScale,
+        jiraConnected: rooms[roomId].jiraConnected
       });
 
       // Broadcast to all in room
@@ -220,7 +233,8 @@ io.on("connection", (socket) => {
         roomId: roomId,
         roomName: rooms[roomId].name,
         users: rooms[roomId].users,
-        estimationScale: rooms[roomId].estimationScale
+        estimationScale: rooms[roomId].estimationScale,
+        jiraConnected: rooms[roomId].jiraConnected
       });
 
       console.log(`User ${userName} joined room: ${roomId}`);
@@ -229,43 +243,37 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Handle voting
-  socket.on("vote", ({ roomId, point }) => {
-    if (!rooms[roomId]) return;
+  // Handle fetch Jira details with room-specific credentials
+  socket.on("fetchJiraDetails", async ({ roomId, jiraKey }) => {
+    if (jiraKey && rooms[roomId]) {
+      const jiraClient = getJiraClientForRoom(roomId);
 
-    if (rooms[roomId].observers[socket.id]) {
-      socket.emit("voteError", "Observers cannot vote");
-      return;
-    }
-
-    if (point === null) {
-      delete rooms[roomId].votes[socket.id];
-    } else {
-      rooms[roomId].votes[socket.id] = point;
-    }
-
-    io.to(roomId).emit("voteUpdate", {
-      votes: rooms[roomId].votes,
-      users: rooms[roomId].users
-    });
-  });
-
-  // Handle toggle observer
-  socket.on("toggleObserver", ({ roomId, userId }) => {
-    if (!rooms[roomId]) return;
-
-    if (rooms[roomId].observers[userId] !== undefined) {
-      rooms[roomId].observers[userId] = !rooms[roomId].observers[userId];
-
-      if (rooms[roomId].observers[userId]) {
-        delete rooms[roomId].votes[userId];
+      if (!jiraClient) {
+        socket.emit("jiraError", { message: "Jira not configured for this room" });
+        return;
       }
 
-      io.to(roomId).emit("observersUpdate", rooms[roomId].observers);
-      io.to(roomId).emit("voteUpdate", {
-        votes: rooms[roomId].votes,
-        users: rooms[roomId].users
-      });
+      try {
+        const details = await getJiraIssueDetails(jiraClient, jiraKey);
+        rooms[roomId].currentStoryData = {
+          issueTitle: details.summary,
+          acceptanceCriteria: details.acceptanceCriteria,
+          description: details.description,
+          issueType: details.issueType,
+          storyStatus: details.status || "To Do"
+        };
+
+        io.to(roomId).emit("jiraDetails", {
+          summary: details.summary,
+          acceptanceCriteria: details.acceptanceCriteria,
+          description: details.description,
+          issueType: details.issueType,
+          status: details.status || "To Do"
+        });
+      } catch (err) {
+        console.error("Failed to fetch Jira details:", err.message);
+        socket.emit("jiraError", { message: "Failed to fetch Jira details: " + err.message });
+      }
     }
   });
 
@@ -273,12 +281,19 @@ io.on("connection", (socket) => {
   socket.on("fetchMultipleJiraDetails", async ({ roomId, issueKeys }) => {
     if (!rooms[roomId] || !issueKeys || !Array.isArray(issueKeys)) return;
 
+    const jiraClient = getJiraClientForRoom(roomId);
+
+    if (!jiraClient) {
+      socket.emit("jiraError", { message: "Jira not configured for this room" });
+      return;
+    }
+
     try {
       const results = {};
 
       for (const key of issueKeys) {
         try {
-          const details = await getJiraIssueDetails(key);
+          const details = await getJiraIssueDetails(jiraClient, key);
           results[key] = {
             summary: details.summary,
             type: details.issueType,
@@ -298,31 +313,13 @@ io.on("connection", (socket) => {
       }
 
       socket.emit("multipleJiraDetails", { roomId, results });
-      console.log(`Sent multipleJiraDetails for ${Object.keys(results).length} stories`);
     } catch (error) {
       console.error("Error in fetchMultipleJiraDetails:", error);
+      socket.emit("jiraError", { message: "Failed to fetch multiple Jira details" });
     }
   });
 
-  // Handle request observers
-  socket.on("requestObservers", ({ roomId }) => {
-    if (rooms[roomId]) {
-      socket.emit("observersUpdate", rooms[roomId].observers);
-    }
-  });
-
-  // Handle reveal
-  socket.on("reveal", ({ roomId }) => {
-    if (!rooms[roomId]) return;
-
-    rooms[roomId].revealed = true;
-    io.to(roomId).emit("reveal", {
-      votes: rooms[roomId].votes,
-      users: rooms[roomId].users
-    });
-  });
-
-  // Handle finalize
+  // Handle finalize with Jira update
   socket.on("finalize", async ({ roomId, data }) => {
     if (!rooms[roomId]) return;
 
@@ -340,91 +337,55 @@ io.on("connection", (socket) => {
     let acceptanceCriteria = null;
 
     if (jiraKey) {
-      try {
-        await updateJiraStoryPoints(jiraKey, point);
-        const details = await getJiraIssueDetails(jiraKey);
-        issueTitle = details.summary;
-        acceptanceCriteria = details.acceptanceCriteria;
+      const jiraClient = getJiraClientForRoom(roomId);
 
-        rooms[roomId].currentStoryData = {
-          issueTitle: details.summary,
-          acceptanceCriteria: details.acceptanceCriteria,
-          description: details.description,
-          issueType: details.issueType,
-          storyStatus: details.status || "To Do"
-        };
+      if (jiraClient) {
+        try {
+          await updateJiraStoryPoints(jiraClient, jiraKey, point);
+          const details = await getJiraIssueDetails(jiraClient, jiraKey);
+          issueTitle = details.summary;
+          acceptanceCriteria = details.acceptanceCriteria;
 
-        io.to(roomId).emit("jiraDetails", {
-          summary: details.summary,
-          acceptanceCriteria: details.acceptanceCriteria,
-          description: details.description,
-          issueType: details.issueType,
-          status: details.status || "To Do"
-        });
-      } catch (err) {
-        console.error("Failed to update Jira:", err.message);
+          rooms[roomId].currentStoryData = {
+            issueTitle: details.summary,
+            acceptanceCriteria: details.acceptanceCriteria,
+            description: details.description,
+            issueType: details.issueType,
+            storyStatus: details.status || "To Do"
+          };
+
+          io.to(roomId).emit("jiraDetails", {
+            summary: details.summary,
+            acceptanceCriteria: details.acceptanceCriteria,
+            description: details.description,
+            issueType: details.issueType,
+            status: details.status || "To Do"
+          });
+        } catch (err) {
+          console.error("Failed to update Jira:", err.message);
+          socket.emit("jiraError", { message: "Failed to update Jira: " + err.message });
+        }
+      } else {
+        console.log("No Jira client available for room, skipping Jira update");
       }
     }
 
     io.to(roomId).emit("final", { point, issueTitle, acceptanceCriteria });
   });
 
-  // Handle reset
-  socket.on("reset", ({ roomId }) => {
-    if (!rooms[roomId]) return;
-
-    rooms[roomId].votes = {};
-    rooms[roomId].revealed = false;
-    rooms[roomId].finalPoint = null;
-    delete rooms[roomId].currentStoryData;
-
-    io.to(roomId).emit("reset");
-  });
-
-  // Handle get Jira transitions
-  socket.on("getJiraTransitions", async ({ roomId, issueKey }) => {
-    try {
-      const { getJiraTransitions } = require("./jira");
-      const transitions = await getJiraTransitions(issueKey);
-      io.to(roomId).emit("jiraTransitions", transitions);
-    } catch (error) {
-      console.error('Error getting transitions:', error);
-      io.to(roomId).emit("jiraTransitions", { transitions: [] });
-    }
-  });
-
-  // Handle fetch Jira details
-  socket.on("fetchJiraDetails", async ({ roomId, jiraKey }) => {
-    if (jiraKey && rooms[roomId]) {
-      try {
-        const details = await getJiraIssueDetails(jiraKey);
-        rooms[roomId].currentStoryData = {
-          issueTitle: details.summary,
-          acceptanceCriteria: details.acceptanceCriteria,
-          description: details.description,
-          issueType: details.issueType,
-          storyStatus: details.status || "To Do"
-        };
-
-        io.to(roomId).emit("jiraDetails", {
-          summary: details.summary,
-          acceptanceCriteria: details.acceptanceCriteria,
-          description: details.description,
-          issueType: details.issueType,
-          status: details.status || "To Do"
-        });
-      } catch (err) {
-        console.error("Failed to fetch Jira details:", err.message);
-      }
-    }
-  });
-
   // Handle update acceptance criteria
   socket.on("updateAcceptanceCriteria", async ({ roomId, jiraKey, acceptanceCriteria }) => {
     if (jiraKey && acceptanceCriteria != null && rooms[roomId]) {
+      const jiraClient = getJiraClientForRoom(roomId);
+
+      if (!jiraClient) {
+        socket.emit("jiraError", { message: "Jira not configured for this room" });
+        return;
+      }
+
       try {
-        await updateJiraAcceptanceCriteria(jiraKey, acceptanceCriteria);
-        const details = await getJiraIssueDetails(jiraKey);
+        await updateJiraAcceptanceCriteria(jiraClient, jiraKey, acceptanceCriteria);
+        const details = await getJiraIssueDetails(jiraClient, jiraKey);
 
         if (rooms[roomId].currentStoryData) {
           rooms[roomId].currentStoryData.acceptanceCriteria = acceptanceCriteria;
@@ -439,6 +400,7 @@ io.on("connection", (socket) => {
         });
       } catch (err) {
         console.error("Failed to update Jira Acceptance Criteria:", err.message);
+        socket.emit("jiraError", { message: "Failed to update acceptance criteria" });
       }
     }
   });
@@ -446,9 +408,16 @@ io.on("connection", (socket) => {
   // Handle update description
   socket.on("updateDescription", async ({ roomId, jiraKey, description }) => {
     if (jiraKey && description != null && rooms[roomId]) {
+      const jiraClient = getJiraClientForRoom(roomId);
+
+      if (!jiraClient) {
+        socket.emit("jiraError", { message: "Jira not configured for this room" });
+        return;
+      }
+
       try {
-        await updateJiraDescription(jiraKey, description);
-        const details = await getJiraIssueDetails(jiraKey);
+        await updateJiraDescription(jiraClient, jiraKey, description);
+        const details = await getJiraIssueDetails(jiraClient, jiraKey);
 
         if (rooms[roomId].currentStoryData) {
           rooms[roomId].currentStoryData.description = description;
@@ -463,23 +432,24 @@ io.on("connection", (socket) => {
         });
       } catch (err) {
         console.error("Failed to update Jira Description:", err.message);
+        socket.emit("jiraError", { message: "Failed to update description" });
       }
-    }
-  });
-
-  socket.on('getCurrentAdmin', ({ roomId }) => {
-    const room = rooms[roomId];
-    if (room && room.admin) {
-      socket.emit('currentAdmin', { adminName: room.admin });
     }
   });
 
   // Handle update story status
   socket.on("updateStoryStatus", async ({ roomId, jiraKey, status }) => {
     if (jiraKey && status && rooms[roomId]) {
+      const jiraClient = getJiraClientForRoom(roomId);
+
+      if (!jiraClient) {
+        socket.emit("jiraError", { message: "Jira not configured for this room" });
+        return;
+      }
+
       try {
-        await updateJiraStatus(jiraKey, status);
-        const details = await getJiraIssueDetails(jiraKey);
+        await updateJiraStatus(jiraClient, jiraKey, status);
+        const details = await getJiraIssueDetails(jiraClient, jiraKey);
 
         if (rooms[roomId].currentStoryData) {
           rooms[roomId].currentStoryData.storyStatus = status;
@@ -503,51 +473,135 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Handle disconnect
-  socket.on("disconnect", () => {
-    console.log(`Socket disconnected: ${socket.id}`);
+  // Handle get Jira transitions
+  socket.on("getJiraTransitions", async ({ roomId, issueKey }) => {
+    if (!rooms[roomId]) return;
 
-    Object.keys(rooms).forEach(roomId => {
-      if (rooms[roomId].users[socket.id]) {
-        const leavingName = rooms[roomId].users[socket.id];
-        const wasAdmin = rooms[roomId].admin === leavingName;
+    const jiraClient = getJiraClientForRoom(roomId);
 
-        // Remove the user from the room
-        delete rooms[roomId].users[socket.id];
-        delete rooms[roomId].votes[socket.id];
-        delete rooms[roomId].observers[socket.id];
+    if (!jiraClient) {
+      socket.emit("jiraError", { message: "Jira not configured for this room" });
+      return;
+    }
 
-        // If the admin left, keep the admin name but mark that they're disconnected
-        if (wasAdmin) {
-          console.log(`Admin ${leavingName} left room ${roomId}, waiting for reconnection...`);
-          rooms[roomId].adminDisconnected = true;
-          rooms[roomId].adminSocketId = null;
-        }
+    try {
+      const transitions = await getJiraTransitions(jiraClient, issueKey);
+      io.to(roomId).emit("jiraTransitions", transitions);
+    } catch (error) {
+      console.error('Error getting transitions:', error);
+      io.to(roomId).emit("jiraTransitions", { transitions: [] });
+    }
+  });
 
-        // Emit updates
-        io.to(roomId).emit("users", rooms[roomId].users);
-        io.to(roomId).emit("admin", rooms[roomId].admin);
-        io.to(roomId).emit("observersUpdate", rooms[roomId].observers);
+  // Other existing handlers (voting, reveal, reset, etc.)
+  socket.on("vote", ({ roomId, point }) => {
+    if (!rooms[roomId]) return;
 
-        // Also emit roomInfo with updated users
-        io.to(roomId).emit("roomInfo", {
-          roomId: roomId,
-          roomName: rooms[roomId].name,
-          users: rooms[roomId].users,
-          estimationScale: rooms[roomId].estimationScale
-        });
+    if (rooms[roomId].observers[socket.id]) {
+      socket.emit("voteError", "Observers cannot vote");
+      return;
+    }
 
-        // Clean up empty rooms
-        if (Object.keys(rooms[roomId].users).length === 0) {
-          setTimeout(() => {
-            if (rooms[roomId] && Object.keys(rooms[roomId].users).length === 0) {
-              delete rooms[roomId];
-              console.log(`Room ${roomId} deleted (empty)`);
-            }
-          }, 5 * 60 * 1000); // 5 minutes
-        }
-      }
+    if (point === null) {
+      delete rooms[roomId].votes[socket.id];
+    } else {
+      rooms[roomId].votes[socket.id] = point;
+    }
+
+    io.to(roomId).emit("voteUpdate", {
+      votes: rooms[roomId].votes,
+      users: rooms[roomId].users
     });
+  });
+
+  socket.on("reveal", ({ roomId }) => {
+    if (!rooms[roomId]) return;
+
+    rooms[roomId].revealed = true;
+    io.to(roomId).emit("reveal", {
+      votes: rooms[roomId].votes,
+      users: rooms[roomId].users
+    });
+  });
+
+  socket.on("reset", ({ roomId }) => {
+    if (!rooms[roomId]) return;
+
+    rooms[roomId].votes = {};
+    rooms[roomId].revealed = false;
+    rooms[roomId].finalPoint = null;
+    delete rooms[roomId].currentStoryData;
+
+    io.to(roomId).emit("reset");
+  });
+
+  socket.on("toggleObserver", ({ roomId, userId }) => {
+    if (!rooms[roomId]) return;
+
+    if (rooms[roomId].observers[userId] !== undefined) {
+      rooms[roomId].observers[userId] = !rooms[roomId].observers[userId];
+
+      if (rooms[roomId].observers[userId]) {
+        delete rooms[roomId].votes[userId];
+      }
+
+      io.to(roomId).emit("observersUpdate", rooms[roomId].observers);
+      io.to(roomId).emit("voteUpdate", {
+        votes: rooms[roomId].votes,
+        users: rooms[roomId].users
+      });
+    }
+  });
+
+  socket.on("getUsers", ({ roomId }) => {
+    if (rooms[roomId]) {
+      socket.emit("users", rooms[roomId].users);
+      socket.emit("roomInfo", {
+        roomId: roomId,
+        roomName: rooms[roomId].name,
+        users: rooms[roomId].users,
+        estimationScale: rooms[roomId].estimationScale,
+        jiraConnected: rooms[roomId].jiraConnected
+      });
+    }
+  });
+
+  socket.on("getRoomInfo", ({ roomId }) => {
+    if (rooms[roomId]) {
+      socket.emit("roomInfo", {
+        roomId: roomId,
+        roomName: rooms[roomId].name,
+        users: rooms[roomId].users,
+        estimationScale: rooms[roomId].estimationScale,
+        jiraConnected: rooms[roomId].jiraConnected
+      });
+    }
+  });
+
+  socket.on("requestCurrentStory", ({ roomId }) => {
+    if (rooms[roomId] && rooms[roomId].currentStoryData) {
+      const storyData = rooms[roomId].currentStoryData;
+      socket.emit("jiraDetails", {
+        summary: storyData.issueTitle,
+        acceptanceCriteria: storyData.acceptanceCriteria,
+        description: storyData.description,
+        issueType: storyData.issueType,
+        status: storyData.storyStatus
+      });
+    }
+  });
+
+  socket.on("requestObservers", ({ roomId }) => {
+    if (rooms[roomId]) {
+      socket.emit("observersUpdate", rooms[roomId].observers);
+    }
+  });
+
+  socket.on('getCurrentAdmin', ({ roomId }) => {
+    const room = rooms[roomId];
+    if (room && room.admin) {
+      socket.emit('currentAdmin', { adminName: room.admin });
+    }
   });
 });
 
@@ -564,7 +618,8 @@ app.get('/api/rooms', (req, res) => {
     createdAt: rooms[roomId].createdAt,
     admin: rooms[roomId].admin,
     adminPresent: rooms[roomId].users[rooms[roomId].adminSocketId] ? true : false,
-    estimationScale: rooms[roomId].estimationScale
+    estimationScale: rooms[roomId].estimationScale,
+    jiraConnected: rooms[roomId].jiraConnected
   }));
   res.json(activeRooms);
 });
