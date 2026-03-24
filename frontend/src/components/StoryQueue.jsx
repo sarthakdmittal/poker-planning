@@ -48,6 +48,45 @@ const StoryQueue = ({
     setStoryDetails(savedDetails);
   }, [stories.map(s => s.key).join(',')]); // Re-run when stories change
 
+  // Save story details to localStorage when they are updated via props
+  useEffect(() => {
+    stories.forEach(story => {
+      // Only save if the story has meaningful data
+      if (story.summary && story.summary !== `Loading ${story.key}...` && story.summary !== `Story ${story.key}`) {
+        const detailsToSave = {
+          summary: story.summary,
+          type: story.type,
+          status: story.status,
+          point: story.point,
+          savedAt: new Date().toISOString()
+        };
+
+        // Check if we need to update localStorage
+        const existing = localStorage.getItem(`storyDetails_${story.key}`);
+        if (existing) {
+          try {
+            const parsed = JSON.parse(existing);
+            // Only update if data has changed
+            if (parsed.summary !== detailsToSave.summary ||
+                parsed.type !== detailsToSave.type ||
+                parsed.status !== detailsToSave.status ||
+                parsed.point !== detailsToSave.point) {
+              localStorage.setItem(`storyDetails_${story.key}`, JSON.stringify(detailsToSave));
+              console.log(`Updated details for ${story.key}`);
+            }
+          } catch (e) {
+            console.error('Error parsing existing details', e);
+            localStorage.setItem(`storyDetails_${story.key}`, JSON.stringify(detailsToSave));
+          }
+        } else if (detailsToSave.summary !== `Loading ${story.key}...`) {
+          // Only save if it's not the loading placeholder
+          localStorage.setItem(`storyDetails_${story.key}`, JSON.stringify(detailsToSave));
+          console.log(`Saved details for ${story.key}`);
+        }
+      }
+    });
+  }, [stories.map(s => `${s.key}-${s.summary}-${s.type}-${s.status}-${s.point}`).join(',')]);
+
   const handleDragStart = (e, index) => {
     if (!isAdmin) {
       e.preventDefault();
@@ -159,17 +198,18 @@ const StoryQueue = ({
     // Start with the story object from props
     let displayStory = { ...story };
 
-    // If we have saved details from localStorage, use them (they are more accurate)
-    if (savedDetail) {
+    // If we have saved details from localStorage, use them as fallback
+    if (savedDetail && (!displayStory.summary || displayStory.summary === `Loading ${story.key}...`)) {
       displayStory = {
         ...displayStory,
         summary: savedDetail.summary || displayStory.summary,
         type: savedDetail.type || displayStory.type,
         status: savedDetail.status || displayStory.status,
+        point: savedDetail.point || displayStory.point,
       };
     }
 
-    // For current story, we might have fresh data from props
+    // For current story, we might have fresh data from props (override saved details)
     if (isCurrentStory) {
       // Check if the current story has real data (not placeholder)
       const hasRealData = story.summary &&

@@ -133,6 +133,11 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
   const [draggedItem, setDraggedItem] = useState(null);
   const [dragOverItem, setDragOverItem] = useState(null);
 
+  // Add flag to track if we've restored from localStorage
+  const [hasRestoredState, setHasRestoredState] = useState(false);
+  // Add flag to prevent overwriting revealed state from server
+  const isInitialMount = useRef(true);
+
   const currentStory = stories[currentStoryIndex] || null;
   const isAdmin = name && adminName && name === adminName;
   const currentUserId = Object.keys(users).find(uid => users[uid] === name);
@@ -140,7 +145,7 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
 
   // Load saved data from localStorage
   useEffect(() => {
-    if (roomId) {
+    if (roomId && !hasRestoredState) {
       const savedData = localStorage.getItem(`simpleStoryData_${roomId}`);
       if (savedData) {
         const parsed = JSON.parse(savedData);
@@ -155,6 +160,7 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
             localStorage.removeItem(`simpleObservers_${roomId}`);
             localStorage.removeItem(`simpleAdmin_${roomId}`);
           } else {
+            // Restore all states including revealed votes
             setStories(parsed.stories || []);
             setCurrentStoryIndex(parsed.currentStoryIndex || 0);
             setRevealed(parsed.revealed || false);
@@ -165,6 +171,12 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
             setResults(parsed.results || null);
             setCards(parsed.cards || [0, 1, 2, 3, 5, 8, 13, 21]);
             setScaleType(parsed.scaleType || 'FIBONACCI');
+
+            console.log("Restored state:", {
+              revealed: parsed.revealed,
+              hasResults: !!parsed.results,
+              voteCount: parsed.results?.votes ? Object.keys(parsed.results.votes).length : 0
+            });
           }
         }
       }
@@ -186,13 +198,14 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
         setAdminName(savedAdmin);
       }
 
+      setHasRestoredState(true);
       setTimeout(() => setIsLoading(false), 100);
     }
-  }, [roomId]);
+  }, [roomId, hasRestoredState]);
 
   // Save data to localStorage
   useEffect(() => {
-    if (roomId && !isLoading) {
+    if (roomId && !isLoading && hasRestoredState) {
       const timestamp = new Date().toISOString();
       const storyData = {
         stories,
@@ -215,28 +228,28 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
       }
     }
   }, [roomId, stories, currentStoryIndex, revealed, finalPoint, selectedCard,
-      votedUsers, userVotes, results, users, observers, adminName, cards, scaleType, isLoading]);
+      votedUsers, userVotes, results, users, observers, adminName, cards, scaleType, isLoading, hasRestoredState]);
 
   // Request stories when joining
   useEffect(() => {
-    if (roomId && !isLoading) {
+    if (roomId && !isLoading && hasRestoredState) {
       socket.emit("request-stories", { roomId });
     }
-  }, [roomId, isLoading]);
+  }, [roomId, isLoading, hasRestoredState]);
 
   // Socket event handlers
   useEffect(() => {
-    if (roomId) {
+    if (roomId && hasRestoredState) {
       socket.emit("getUsers", { roomId });
       socket.emit("requestObservers", { roomId });
       socket.emit("getRoomInfo", { roomId });
       socket.emit("join-room", { userName: name, roomId });
     }
-  }, [roomId, name]);
+  }, [roomId, name, hasRestoredState]);
 
   useEffect(() => {
     const onConnect = () => {
-      if (roomId) {
+      if (roomId && hasRestoredState) {
         socket.emit("getUsers", { roomId });
         socket.emit("requestObservers", { roomId });
         socket.emit("getCurrentAdmin", { roomId });
@@ -246,10 +259,10 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
 
     socket.on("connect", onConnect);
     return () => socket.off("connect", onConnect);
-  }, [roomId]);
+  }, [roomId, hasRestoredState]);
 
   useEffect(() => {
-    if (!roomId) return;
+    if (!roomId || !hasRestoredState) return;
 
     const checkUserInRoom = () => {
       const isUserInRoom = Object.values(users).includes(name);
@@ -275,7 +288,7 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
       socket.off("users", handleUsersUpdate);
       clearTimeout(timeout);
     };
-  }, [roomId, name, users]);
+  }, [roomId, name, users, hasRestoredState]);
 
   useEffect(() => {
     // Handle stories update from server
@@ -306,8 +319,12 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
         }
       }
       if (data?.stories) {
-        setStories(data.stories);
-        setCurrentStoryIndex(data.currentStoryIndex || 0);
+        // Only update stories from server if we don't have local data or if it's initial load
+        if (isInitialMount.current || stories.length === 0) {
+          setStories(data.stories);
+          setCurrentStoryIndex(data.currentStoryIndex || 0);
+          isInitialMount.current = false;
+        }
       }
     });
 
@@ -321,6 +338,7 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
     });
 
     socket.on("reveal", (data) => {
+      console.log("Reveal event received:", data);
       setResults(data);
       setRevealed(true);
     });
@@ -334,6 +352,7 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
     });
 
     socket.on("reset", () => {
+      console.log("Reset event received");
       setRevealed(false);
       setResults(null);
       setFinalPoint(null);
@@ -351,7 +370,11 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
       if (data?.votes) {
         setVotedUsers(Object.keys(data.votes));
         setUserVotes(data.votes);
-        if (revealed) setResults(data);
+        // Only update results if we're already in revealed state
+        // This prevents overwriting persisted results on reconnect
+        if (revealed) {
+          setResults(data);
+        }
       }
     });
 

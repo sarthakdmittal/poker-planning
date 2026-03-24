@@ -511,6 +511,8 @@ export default function PokerRoom({ name, onLeaveRoom }) {
   const [cards, setCards] = useState([0, 1, 2, 3, 5, 8, 13, 21]); // Default Fibonacci
   const [scaleType, setScaleType] = useState('FIBONACCI');
   const [jiraConnected, setJiraConnected] = useState(false); // Add Jira connection status
+  const [hasRestoredState, setHasRestoredState] = useState(false);
+  const [skipNextVoteUpdate, setSkipNextVoteUpdate] = useState(false);
 
   // Refs for editors
   const acceptanceEditorRef = useRef(null);
@@ -533,131 +535,144 @@ export default function PokerRoom({ name, onLeaveRoom }) {
   ];
 
   // Load saved story data from localStorage on initial render
-  useEffect(() => {
-    if (roomId) {
-      const savedStoryData = localStorage.getItem(`storyData_${roomId}`);
-      if (savedStoryData) {
-        const parsed = JSON.parse(savedStoryData);
+    // Load saved story data from localStorage on initial render
+    useEffect(() => {
+      if (roomId && !hasRestoredState) {
+        const savedStoryData = localStorage.getItem(`storyData_${roomId}`);
+        if (savedStoryData) {
+          const parsed = JSON.parse(savedStoryData);
 
-        // Check if data is older than 24 hours (86400000 milliseconds)
-        if (parsed.savedAt) {
-          const savedTime = new Date(parsed.savedAt).getTime();
-          const currentTime = new Date().getTime();
-          const timeDiff = currentTime - savedTime;
-          const hoursDiff = timeDiff / (1000 * 60 * 60);
+          // Check if data is older than 24 hours (86400000 milliseconds)
+          if (parsed.savedAt) {
+            const savedTime = new Date(parsed.savedAt).getTime();
+            const currentTime = new Date().getTime();
+            const timeDiff = currentTime - savedTime;
+            const hoursDiff = timeDiff / (1000 * 60 * 60);
 
-          console.log(`Data age: ${hoursDiff.toFixed(2)} hours`);
+            console.log(`Data age: ${hoursDiff.toFixed(2)} hours`);
 
-          if (hoursDiff > 24) {
-            console.log('Data is older than 24 hours, clearing...');
-            // Clear stale data
-            localStorage.removeItem(`storyData_${roomId}`);
-            localStorage.removeItem(`users_${roomId}`);
-            localStorage.removeItem(`observers_${roomId}`);
-            localStorage.removeItem(`admin_${roomId}`);
+            if (hoursDiff > 24) {
+              console.log('Data is older than 24 hours, clearing...');
+              // Clear stale data
+              localStorage.removeItem(`storyData_${roomId}`);
+              localStorage.removeItem(`users_${roomId}`);
+              localStorage.removeItem(`observers_${roomId}`);
+              localStorage.removeItem(`admin_${roomId}`);
 
-            // Reset all states
-            setJiraKey("");
-            setIssueTitle(null);
-            setAcceptanceCriteria(null);
-            setDescription(null);
-            setIssueType(null);
-            setStoryStatus("");
-            setStoryList([]);
-            setCurrentStoryIndex(0);
-            setStoryListInput("");
-            setRevealed(false);
-            setFinalPoint(null);
-            setSelectedCard(null);
-            setVotedUsers([]);
-            setUserVotes({});
-            setUsers({});
-            setObservers({});
+              // Reset all states
+              setJiraKey("");
+              setIssueTitle(null);
+              setAcceptanceCriteria(null);
+              setDescription(null);
+              setIssueType(null);
+              setStoryStatus("");
+              setStoryList([]);
+              setCurrentStoryIndex(0);
+              setStoryListInput("");
+              setRevealed(false);
+              setFinalPoint(null);
+              setSelectedCard(null);
+              setVotedUsers([]);
+              setUserVotes({});
+              setUsers({});
+              setObservers({});
+              setResults(null);
 
-            setIsLoading(false);
-            return; // Exit early, don't load stale data
+              setIsLoading(false);
+              setHasRestoredState(true);
+              return; // Exit early, don't load stale data
+            }
+          }
+
+          // Only load data if it's not stale
+          setJiraKey(parsed.jiraKey || "");
+          setIssueTitle(parsed.issueTitle || null);
+          setAcceptanceCriteria(parsed.acceptanceCriteria || null);
+          setDescription(parsed.description || null);
+          setIssueType(parsed.issueType || null);
+          setStoryStatus(parsed.storyStatus || "");
+          setStoryList(parsed.storyList || []);
+          setCurrentStoryIndex(parsed.currentStoryIndex || 0);
+          setStoryListInput(parsed.storyListInput || "");
+          setAllStoryDetails(parsed.allStoryDetails || {});
+          setCards(parsed.cards || [0, 1, 2, 3, 5, 8, 13, 21]);
+          setScaleType(parsed.scaleType || 'FIBONACCI');
+
+          // Restore voting state
+          setRevealed(parsed.revealed || false);
+          setFinalPoint(parsed.finalPoint || null);
+          setSelectedCard(parsed.selectedCard || null);
+          setVotedUsers(parsed.votedUsers || []);
+          setUserVotes(parsed.userVotes || {});
+
+          // If there was a final point, we might want to show results
+          if (parsed.results) {
+            console.log("Restoring results from localStorage");
+            setResults(parsed.results);
+            if (parsed.revealed) {
+              setSkipNextVoteUpdate(true); // Skip the first vote update
+            }
+          } else if (parsed.revealed && parsed.userVotes && parsed.users) {
+            // For backward compatibility
+            setResults({
+              votes: parsed.userVotes || {},
+              users: parsed.users || {}
+            });
+            setSkipNextVoteUpdate(true);
           }
         }
 
-        // Only load data if it's not stale
-        setJiraKey(parsed.jiraKey || "");
-        setIssueTitle(parsed.issueTitle || null);
-        setAcceptanceCriteria(parsed.acceptanceCriteria || null);
-        setDescription(parsed.description || null);
-        setIssueType(parsed.issueType || null);
-        setStoryStatus(parsed.storyStatus || "");
-        setStoryList(parsed.storyList || []);
-        setCurrentStoryIndex(parsed.currentStoryIndex || 0);
-        setStoryListInput(parsed.storyListInput || "");
-        setAllStoryDetails(parsed.allStoryDetails || {});
-        setCards(parsed.cards || [0, 1, 2, 3, 5, 8, 13, 21]);
-        setScaleType(parsed.scaleType || 'FIBONACCI');
+        // Load saved users from localStorage
+        const savedUsers = localStorage.getItem(`users_${roomId}`);
+        if (savedUsers) {
+          const parsedUsers = JSON.parse(savedUsers);
+          // Check if users data has timestamp (if you saved it with timestamp)
+          if (parsedUsers.savedAt) {
+            const savedTime = new Date(parsedUsers.savedAt).getTime();
+            const currentTime = new Date().getTime();
+            const hoursDiff = (currentTime - savedTime) / (1000 * 60 * 60);
 
-        // Restore voting state
-        setRevealed(parsed.revealed || false);
-        setFinalPoint(parsed.finalPoint || null);
-        setSelectedCard(parsed.selectedCard || null);
-        setVotedUsers(parsed.votedUsers || []);
-        setUserVotes(parsed.userVotes || {});
-
-        // If there was a final point, we might want to show results
-        if (parsed.results) {
-          setResults(parsed.results);
-        } else if (parsed.revealed && parsed.userVotes && parsed.users) {
-          // For backward compatibility
-          setResults({
-            votes: parsed.userVotes || {},
-            users: parsed.users || {}
-          });
-        }
-      }
-
-      // Load saved users from localStorage
-      const savedUsers = localStorage.getItem(`users_${roomId}`);
-      if (savedUsers) {
-        const parsedUsers = JSON.parse(savedUsers);
-        // Check if users data has timestamp (if you saved it with timestamp)
-        if (parsedUsers.savedAt) {
-          const savedTime = new Date(parsedUsers.savedAt).getTime();
-          const currentTime = new Date().getTime();
-          const hoursDiff = (currentTime - savedTime) / (1000 * 60 * 60);
-
-          if (hoursDiff <= 24) {
+            if (hoursDiff <= 24) {
+              setUsers(parsedUsers);
+            } else {
+              localStorage.removeItem(`users_${roomId}`);
+            }
+          } else {
             setUsers(parsedUsers);
-          } else {
-            localStorage.removeItem(`users_${roomId}`);
           }
-        } else {
-          setUsers(parsedUsers);
         }
-      }
 
-      // Load saved observers from localStorage
-      const savedObservers = localStorage.getItem(`observers_${roomId}`);
-      if (savedObservers) {
-        const parsedObservers = JSON.parse(savedObservers);
-        // Check if observers data has timestamp
-        if (parsedObservers.savedAt) {
-          const savedTime = new Date(parsedObservers.savedAt).getTime();
-          const currentTime = new Date().getTime();
-          const hoursDiff = (currentTime - savedTime) / (1000 * 60 * 60);
+        // Load saved observers from localStorage
+        const savedObservers = localStorage.getItem(`observers_${roomId}`);
+        if (savedObservers) {
+          const parsedObservers = JSON.parse(savedObservers);
+          // Check if observers data has timestamp
+          if (parsedObservers.savedAt) {
+            const savedTime = new Date(parsedObservers.savedAt).getTime();
+            const currentTime = new Date().getTime();
+            const hoursDiff = (currentTime - savedTime) / (1000 * 60 * 60);
 
-          if (hoursDiff <= 24) {
+            if (hoursDiff <= 24) {
+              setObservers(parsedObservers);
+            } else {
+              localStorage.removeItem(`observers_${roomId}`);
+            }
+          } else {
             setObservers(parsedObservers);
-          } else {
-            localStorage.removeItem(`observers_${roomId}`);
           }
-        } else {
-          setObservers(parsedObservers);
         }
-      }
 
-      const hasData = savedStoryData || savedUsers || savedObservers;
-      setTimeout(() => {
-        setIsLoading(false);
-      }, 100);
-    }
-  }, [roomId]);
+        const savedAdmin = localStorage.getItem(`admin_${roomId}`);
+        if (savedAdmin) {
+          setAdminName(savedAdmin);
+        }
+
+        setHasRestoredState(true);
+        setTimeout(() => {
+          setIsLoading(false);
+        }, 100);
+      }
+    }, [roomId, hasRestoredState]);
 
   // Fetch details for all stories when storyList changes
   useEffect(() => {
@@ -699,53 +714,54 @@ export default function PokerRoom({ name, onLeaveRoom }) {
   }, [roomId, name]);
 
   // Save story data to localStorage whenever it changes
-  useEffect(() => {
-    if (roomId) {
-      const timestamp = new Date().toISOString();
+    // Save story data to localStorage whenever it changes
+    useEffect(() => {
+      if (roomId && !isLoading && hasRestoredState) {
+        const timestamp = new Date().toISOString();
 
-      const storyData = {
-        jiraKey,
-        issueTitle,
-        acceptanceCriteria,
-        description,
-        issueType,
-        storyStatus,
-        storyList,
-        currentStoryIndex,
-        storyListInput,
-        revealed,
-        finalPoint,
-        selectedCard,
-        votedUsers,
-        userVotes,
-        users,
-        results,
-        allStoryDetails,
-        cards,
-        scaleType,
-        savedAt: timestamp  // Add timestamp here
-      };
-      localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
+        const storyData = {
+          jiraKey,
+          issueTitle,
+          acceptanceCriteria,
+          description,
+          issueType,
+          storyStatus,
+          storyList,
+          currentStoryIndex,
+          storyListInput,
+          revealed,
+          finalPoint,
+          selectedCard,
+          votedUsers,
+          userVotes,
+          users,
+          results,
+          allStoryDetails,
+          cards,
+          scaleType,
+          savedAt: timestamp  // Add timestamp here
+        };
+        localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
 
-      // Also save users separately with timestamp
-      const usersWithTimestamp = {
-        ...users,
-        savedAt: timestamp
-      };
-      localStorage.setItem(`users_${roomId}`, JSON.stringify(usersWithTimestamp));
+        // Also save users separately with timestamp
+        const usersWithTimestamp = {
+          ...users,
+          savedAt: timestamp
+        };
+        localStorage.setItem(`users_${roomId}`, JSON.stringify(usersWithTimestamp));
 
-      // Save observers with timestamp
-      const observersWithTimestamp = {
-        ...observers,
-        savedAt: timestamp
-      };
-      localStorage.setItem(`observers_${roomId}`, JSON.stringify(observersWithTimestamp));
+        // Save observers with timestamp
+        const observersWithTimestamp = {
+          ...observers,
+          savedAt: timestamp
+        };
+        localStorage.setItem(`observers_${roomId}`, JSON.stringify(observersWithTimestamp));
 
-      console.log(`Data saved at ${timestamp}`);
-    }
-  }, [roomId, jiraKey, issueTitle, acceptanceCriteria, description, issueType,
-      storyStatus, storyList, currentStoryIndex, storyListInput, revealed,
-      finalPoint, selectedCard, votedUsers, userVotes, users, observers, results, allStoryDetails, cards, scaleType]);
+        console.log(`Data saved at ${timestamp}, revealed: ${revealed}`);
+      }
+    }, [roomId, jiraKey, issueTitle, acceptanceCriteria, description, issueType,
+        storyStatus, storyList, currentStoryIndex, storyListInput, revealed,
+        finalPoint, selectedCard, votedUsers, userVotes, users, observers, results, allStoryDetails, cards, scaleType, isLoading, hasRestoredState]);
 
   // Update this useEffect to handle reconnection better
   useEffect(() => {
@@ -1032,20 +1048,22 @@ export default function PokerRoom({ name, onLeaveRoom }) {
       }
     });
 
-    socket.on("reveal", (data) => {
-      setResults(data);
-      setRevealed(true);
-      // Save to localStorage
-      if (roomId) {
-        const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
-        storyData.revealed = true;
-        storyData.results = data;
-        storyData.votedUsers = Object.keys(data.votes || {});
-        storyData.userVotes = data.votes || {};
-        storyData.savedAt = new Date().toISOString();
-        localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
-      }
-    });
+        socket.on("reveal", (data) => {
+          console.log("Reveal event received:", data);
+          setResults(data);
+          setRevealed(true);
+          setSkipNextVoteUpdate(false); // Reset skip flag on new reveal
+          // Save to localStorage
+          if (roomId) {
+            const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
+            storyData.revealed = true;
+            storyData.results = data;
+            storyData.votedUsers = Object.keys(data.votes || {});
+            storyData.userVotes = data.votes || {};
+            storyData.savedAt = new Date().toISOString();
+            localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
+          }
+        });
 
     socket.on("storyStatusUpdate", ({ jiraKey: key, status }) => {
       if (jiraKey === key) {
@@ -1083,27 +1101,28 @@ export default function PokerRoom({ name, onLeaveRoom }) {
       setEditingDescriptionVisual(false);
     });
 
-    socket.on("reset", () => {
-      console.log("Reset received");
-      setRevealed(false);
-      setResults(null);
-      setFinalPoint(null);
-      setVotedUsers([]);
-      setSelectedCard(null);
-      setObservers({});
-      setObservingTarget(null);
-      // Save reset state to localStorage
-      if (roomId) {
-        const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
-        storyData.revealed = false;
-        storyData.results = null;
-        storyData.finalPoint = null;
-        storyData.votedUsers = [];
-        storyData.userVotes = {};
-        storyData.savedAt = new Date().toISOString();
-        localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
-      }
-    });
+        socket.on("reset", () => {
+          console.log("Reset received");
+          setRevealed(false);
+          setResults(null);
+          setFinalPoint(null);
+          setVotedUsers([]);
+          setSelectedCard(null);
+          setObservers({});
+          setObservingTarget(null);
+          setSkipNextVoteUpdate(false); // Reset skip flag on reset
+          // Save reset state to localStorage
+          if (roomId) {
+            const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
+            storyData.revealed = false;
+            storyData.results = null;
+            storyData.finalPoint = null;
+            storyData.votedUsers = [];
+            storyData.userVotes = {};
+            storyData.savedAt = new Date().toISOString();
+            localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
+          }
+        });
 
     socket.on("admin", (data) => {
       console.log("Admin set/updated:", data);
@@ -1116,32 +1135,41 @@ export default function PokerRoom({ name, onLeaveRoom }) {
       }
     });
 
-    socket.on("voteUpdate", (data) => {
-      console.log("Vote update received:", data);
-      if (data && data.votes) {
-        setVotedUsers(Object.keys(data.votes));
-        setUserVotes(data.votes);
+        socket.on("voteUpdate", (data) => {
+          console.log("Vote update received:", data);
 
-        // Only update results if revealed, otherwise preserve existing results
-        if (revealed) {
-          setResults(data);
-        }
-        // Don't set results to null when not revealed - this preserves loaded results
-
-        // Save votes to localStorage
-        if (roomId) {
-          const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
-          storyData.votedUsers = Object.keys(data.votes);
-          storyData.userVotes = data.votes;
-          if (revealed) {
-            storyData.results = data;
+          // Skip this update if we just restored state
+          if (skipNextVoteUpdate) {
+            console.log("Skipping vote update to preserve restored results");
+            setSkipNextVoteUpdate(false);
+            return;
           }
-          // If not revealed, preserve the existing results in localStorage
-          storyData.savedAt = new Date().toISOString();
-          localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
-        }
-      }
-    });
+
+          if (data && data.votes) {
+            setVotedUsers(Object.keys(data.votes));
+            setUserVotes(data.votes);
+
+            // Only update results if revealed, otherwise preserve existing results
+            if (revealed) {
+              console.log("Updating results in revealed state");
+              setResults(data);
+            } else {
+              console.log("Not in revealed state, preserving existing results");
+            }
+
+            // Save votes to localStorage
+            if (roomId) {
+              const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
+              storyData.votedUsers = Object.keys(data.votes);
+              storyData.userVotes = data.votes;
+              if (revealed) {
+                storyData.results = data;
+              }
+              storyData.savedAt = new Date().toISOString();
+              localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
+            }
+          }
+        });
 
     socket.on("jiraTransitions", (data) => {
       console.log("Received transitions:", data);

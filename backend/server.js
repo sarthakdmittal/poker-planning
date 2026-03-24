@@ -650,6 +650,41 @@ io.on("connection", (socket) => {
       socket.emit('currentAdmin', { adminName: room.admin });
     }
   });
+
+  // Sync room state for reconnecting users
+  socket.on("sync-room-state", ({ roomId, revealed, results }) => {
+    if (!rooms[roomId]) return;
+
+    console.log(`Syncing state for room ${roomId}: revealed=${revealed}, hasResults=${!!results}`);
+
+    // Store the revealed state in the room object for persistence
+    if (revealed && results) {
+      rooms[roomId].revealed = true;
+      rooms[roomId].votes = results.votes || rooms[roomId].votes;
+
+      // Broadcast to the specific client only
+      socket.emit("reveal", {
+        votes: results.votes,
+        users: rooms[roomId].users
+      });
+    }
+  });
+
+  // Request current room state when rejoining
+  socket.on("request-room-state", ({ roomId }) => {
+    if (!rooms[roomId]) return;
+
+    const room = rooms[roomId];
+
+    if (room.revealed && room.votes) {
+      // Send the current revealed state to the client
+      socket.emit("reveal", {
+        votes: room.votes,
+        users: room.users
+      });
+      console.log(`Sent revealed state to rejoining user in room ${roomId}`);
+    }
+  });
 });
 
 app.get('/api/room/:roomId', (req, res) => {
