@@ -513,6 +513,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
   const [jiraConnected, setJiraConnected] = useState(false); // Add Jira connection status
   const [hasRestoredState, setHasRestoredState] = useState(false);
   const [skipNextVoteUpdate, setSkipNextVoteUpdate] = useState(false);
+  const [storyResults, setStoryResults] = useState({}); // Store results for each story
 
   // Refs for editors
   const acceptanceEditorRef = useRef(null);
@@ -739,6 +740,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
           allStoryDetails,
           cards,
           scaleType,
+          storyResults,
           savedAt: timestamp  // Add timestamp here
         };
         localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
@@ -761,7 +763,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
       }
     }, [roomId, jiraKey, issueTitle, acceptanceCriteria, description, issueType,
         storyStatus, storyList, currentStoryIndex, storyListInput, revealed,
-        finalPoint, selectedCard, votedUsers, userVotes, users, observers, results, allStoryDetails, cards, scaleType, isLoading, hasRestoredState]);
+        finalPoint, selectedCard, votedUsers, userVotes, users, observers, results, allStoryDetails, cards, scaleType, isLoading, hasRestoredState, storyResults]);
 
   // Update this useEffect to handle reconnection better
   useEffect(() => {
@@ -1052,14 +1054,30 @@ export default function PokerRoom({ name, onLeaveRoom }) {
           console.log("Reveal event received:", data);
           setResults(data);
           setRevealed(true);
-          setSkipNextVoteUpdate(false); // Reset skip flag on new reveal
-          // Save to localStorage
-          if (roomId) {
+          setSkipNextVoteUpdate(false);
+
+          // Save results for current story
+          if (roomId && jiraKey) {
+            setStoryResults(prev => ({
+              ...prev,
+              [jiraKey]: {
+                results: data,
+                revealed: true,
+                votes: data.votes,
+                userVotes: data.votes,
+                votedUsers: Object.keys(data.votes || {}),
+                finalPoint: finalPoint, // Keep final point if exists
+                selectedCard: selectedCard
+              }
+            }));
+
+            // Save to localStorage
             const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
             storyData.revealed = true;
             storyData.results = data;
             storyData.votedUsers = Object.keys(data.votes || {});
             storyData.userVotes = data.votes || {};
+            storyData.storyResults = storyResults; // Save story results
             storyData.savedAt = new Date().toISOString();
             localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
           }
@@ -1138,7 +1156,6 @@ export default function PokerRoom({ name, onLeaveRoom }) {
         socket.on("voteUpdate", (data) => {
           console.log("Vote update received:", data);
 
-          // Skip this update if we just restored state
           if (skipNextVoteUpdate) {
             console.log("Skipping vote update to preserve restored results");
             setSkipNextVoteUpdate(false);
@@ -1149,19 +1166,45 @@ export default function PokerRoom({ name, onLeaveRoom }) {
             setVotedUsers(Object.keys(data.votes));
             setUserVotes(data.votes);
 
-            // Only update results if revealed, otherwise preserve existing results
+            // Save votes for current story
+            if (roomId && jiraKey) {
+              setStoryResults(prev => ({
+                ...prev,
+                [jiraKey]: {
+                  ...prev[jiraKey],
+                  votes: data.votes,
+                  userVotes: data.votes,
+                  votedUsers: Object.keys(data.votes),
+                  revealed: prev[jiraKey]?.revealed || false,
+                  selectedCard: selectedCard
+                }
+              }));
+            }
+
             if (revealed) {
               console.log("Updating results in revealed state");
               setResults(data);
-            } else {
-              console.log("Not in revealed state, preserving existing results");
+
+              // Update story results when revealed
+              if (roomId && jiraKey) {
+                setStoryResults(prev => ({
+                  ...prev,
+                  [jiraKey]: {
+                    ...prev[jiraKey],
+                    results: data,
+                    votes: data.votes,
+                    userVotes: data.votes
+                  }
+                }));
+              }
             }
 
-            // Save votes to localStorage
+            // Save to localStorage
             if (roomId) {
               const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
               storyData.votedUsers = Object.keys(data.votes);
               storyData.userVotes = data.votes;
+              storyData.storyResults = storyResults;
               if (revealed) {
                 storyData.results = data;
               }
@@ -1615,24 +1658,66 @@ export default function PokerRoom({ name, onLeaveRoom }) {
           })}
           currentStoryIndex={currentStoryIndex}
           onSelectStory={(index) => {
+            const selectedKey = storyList[index];
+
+            // Save current story results before switching
+            if (jiraKey && (revealed || userVotes)) {
+              setStoryResults(prev => ({
+                ...prev,
+                [jiraKey]: {
+                  results: results,
+                  revealed: revealed,
+                  votes: userVotes,
+                  userVotes: userVotes,
+                  votedUsers: votedUsers,
+                  finalPoint: finalPoint,
+                  selectedCard: selectedCard
+                }
+              }));
+            }
+
+            // Switch to new story
             setCurrentStoryIndex(index);
-            setRevealed(false);
-            setResults(null);
-            setFinalPoint(null);
+
+            // Restore results for the selected story if they exist
+            if (selectedKey && storyResults[selectedKey]) {
+              const saved = storyResults[selectedKey];
+              console.log("Restoring results for story:", selectedKey, saved);
+
+              setResults(saved.results || null);
+              setRevealed(saved.revealed || false);
+              setUserVotes(saved.userVotes || {});
+              setVotedUsers(saved.votedUsers || []);
+              setFinalPoint(saved.finalPoint || null);
+              setSelectedCard(saved.selectedCard || null);
+            } else {
+              // Clear for new story
+              setRevealed(false);
+              setResults(null);
+              setFinalPoint(null);
+              setSelectedCard(null);
+              setVotedUsers([]);
+              setUserVotes({});
+            }
+
             setObservingTarget(null);
             setEditingAcceptance(false);
             setEditingAcceptanceVisual(false);
             setEditingDescription(false);
             setEditingDescriptionVisual(false);
-            const selectedKey = storyList[index];
+
             if (selectedKey) {
               setJiraKey(selectedKey);
               if (jiraConnected) {
                 socket.emit("fetchJiraDetails", { roomId, jiraKey: selectedKey });
               }
             }
-            socket.emit("reset", { roomId });
+
+            // IMPORTANT: Remove the socket.emit("reset") call to preserve votes
+            // socket.emit("reset", { roomId }); // COMMENT THIS OUT OR REMOVE
           }}
+//             socket.emit("reset", { roomId });
+
           onAddStories={(newStories) => {
             const keys = newStories.map(s => s.key);
             setStoryList([...storyList, ...keys]);
@@ -1863,10 +1948,47 @@ export default function PokerRoom({ name, onLeaveRoom }) {
                     className="progress-nav-btn"
                     onClick={() => {
                       if (currentStoryIndex > 0) {
+                        const previousKey = storyList[currentStoryIndex - 1];
+
+                        // Save current story results
+                        if (jiraKey && (revealed || userVotes)) {
+                          setStoryResults(prev => ({
+                            ...prev,
+                            [jiraKey]: {
+                              results: results,
+                              revealed: revealed,
+                              votes: userVotes,
+                              userVotes: userVotes,
+                              votedUsers: votedUsers,
+                              finalPoint: finalPoint,
+                              selectedCard: selectedCard
+                            }
+                          }));
+                        }
+
+                        // Switch to previous story
                         setCurrentStoryIndex(currentStoryIndex - 1);
-                        setRevealed(false);
-                        setResults(null);
-                        setFinalPoint(null);
+
+                        // Restore results for the previous story
+                        if (previousKey && storyResults[previousKey]) {
+                          const saved = storyResults[previousKey];
+                          console.log("Restoring results for story:", previousKey, saved);
+
+                          setResults(saved.results || null);
+                          setRevealed(saved.revealed || false);
+                          setUserVotes(saved.userVotes || {});
+                          setVotedUsers(saved.votedUsers || []);
+                          setFinalPoint(saved.finalPoint || null);
+                          setSelectedCard(saved.selectedCard || null);
+                        } else {
+                          setRevealed(false);
+                          setResults(null);
+                          setFinalPoint(null);
+                          setSelectedCard(null);
+                          setVotedUsers([]);
+                          setUserVotes({});
+                        }
+
                         setIssueTitle(null);
                         setAcceptanceCriteria(null);
                         setDescription(null);
@@ -1875,7 +1997,9 @@ export default function PokerRoom({ name, onLeaveRoom }) {
                         setEditingAcceptanceVisual(false);
                         setEditingDescription(false);
                         setEditingDescriptionVisual(false);
-                        socket.emit("reset", { roomId });
+
+                        // IMPORTANT: Remove the socket.emit("reset") call
+                        // socket.emit("reset", { roomId }); // COMMENT THIS OUT
                       }
                     }}
                     disabled={currentStoryIndex === 0}
@@ -1890,10 +2014,47 @@ export default function PokerRoom({ name, onLeaveRoom }) {
                     className="progress-nav-btn"
                     onClick={() => {
                       if (currentStoryIndex < storyList.length - 1) {
+                        const nextKey = storyList[currentStoryIndex + 1];
+
+                        // Save current story results
+                        if (jiraKey && (revealed || userVotes)) {
+                          setStoryResults(prev => ({
+                            ...prev,
+                            [jiraKey]: {
+                              results: results,
+                              revealed: revealed,
+                              votes: userVotes,
+                              userVotes: userVotes,
+                              votedUsers: votedUsers,
+                              finalPoint: finalPoint,
+                              selectedCard: selectedCard
+                            }
+                          }));
+                        }
+
+                        // Switch to next story
                         setCurrentStoryIndex(currentStoryIndex + 1);
-                        setRevealed(false);
-                        setResults(null);
-                        setFinalPoint(null);
+
+                        // Restore results for the next story
+                        if (nextKey && storyResults[nextKey]) {
+                          const saved = storyResults[nextKey];
+                          console.log("Restoring results for story:", nextKey, saved);
+
+                          setResults(saved.results || null);
+                          setRevealed(saved.revealed || false);
+                          setUserVotes(saved.userVotes || {});
+                          setVotedUsers(saved.votedUsers || []);
+                          setFinalPoint(saved.finalPoint || null);
+                          setSelectedCard(saved.selectedCard || null);
+                        } else {
+                          setRevealed(false);
+                          setResults(null);
+                          setFinalPoint(null);
+                          setSelectedCard(null);
+                          setVotedUsers([]);
+                          setUserVotes({});
+                        }
+
                         setIssueTitle(null);
                         setAcceptanceCriteria(null);
                         setDescription(null);
@@ -1902,7 +2063,9 @@ export default function PokerRoom({ name, onLeaveRoom }) {
                         setEditingAcceptanceVisual(false);
                         setEditingDescription(false);
                         setEditingDescriptionVisual(false);
-                        socket.emit("reset", { roomId });
+
+                        // IMPORTANT: Remove the socket.emit("reset") call
+                        // socket.emit("reset", { roomId }); // COMMENT THIS OUT
                       }
                     }}
                     disabled={currentStoryIndex >= storyList.length - 1}
