@@ -63,11 +63,11 @@ const getAvatarColor = (name) => {
 // Get initials from name
 const getInitials = (name) => {
   return name
-    .split(' ')
-    .map(word => word[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
+      .split(' ')
+      .map(word => word[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
 };
 
 // Helper functions for cursor position
@@ -164,14 +164,14 @@ function jiraWikiToHtml(text) {
 
     // Handle color
     str = str.replace(
-      /\{color:([#\w]+)\}(.*?)\{color\}/g,
-      '<span style="color:$1">$2</span>'
+        /\{color:([#\w]+)\}(.*?)\{color\}/g,
+        '<span style="color:$1">$2</span>'
     );
 
     // Handle links
     str = str.replace(
-      /\[([^\|]+)\|([^\]]+)\]/g,
-      '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
+        /\[([^\|]+)\|([^\]]+)\]/g,
+        '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
     );
 
     return str;
@@ -205,9 +205,9 @@ function jiraWikiToHtml(text) {
 
     if (inCodeBlock) {
       html += line
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;") + '\n';
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;") + '\n';
       continue;
     }
 
@@ -292,7 +292,7 @@ function htmlToJiraWiki(html) {
     // TEXT NODE
     if (node.nodeType === Node.TEXT_NODE) {
       return node.textContent
-        .replace(/\bMap\b(?!<)/g, 'Map<String, Object>');
+          .replace(/\bMap\b(?!<)/g, 'Map<String, Object>');
     }
 
     if (node.nodeType !== Node.ELEMENT_NODE) return '';
@@ -300,8 +300,8 @@ function htmlToJiraWiki(html) {
     const tagName = node.tagName.toLowerCase();
 
     const children = Array.from(node.childNodes)
-      .map(child => processNode(child))
-      .join('');
+        .map(child => processNode(child))
+        .join('');
 
     switch (tagName) {
 
@@ -347,9 +347,9 @@ function htmlToJiraWiki(html) {
         const level = tagName;
 
         const text = children
-          .replace(/^\{\*(.*?)\*\}$/, '$1')
-          .replace(/^\*(.*?)\*$/, '$1')
-          .trim();
+            .replace(/^\{\*(.*?)\*\}$/, '$1')
+            .replace(/^\*(.*?)\*$/, '$1')
+            .trim();
 
         return `${level}. +${text}+\n\n`;
       }
@@ -384,9 +384,9 @@ function htmlToJiraWiki(html) {
         }
 
         const marker =
-          node.parentNode?.tagName?.toLowerCase() === 'ol'
-            ? '#'
-            : '*';
+            node.parentNode?.tagName?.toLowerCase() === 'ol'
+                ? '#'
+                : '*';
 
         return `${marker.repeat(depth - 1)} ${children.trim()}\n`;
       }
@@ -420,14 +420,14 @@ function htmlToJiraWiki(html) {
   }
 
   let result = processNode(tempDiv)
-    .replace(/\n{3,}/g, '\n\n')
-    .replace(/_\s+_/g, '')
-    .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .replace(/_\s+_/g, '')
+      .replace(/[ \t]+\n/g, '\n')
 
-    // restore Jira strong emphasis {*text*}
-    .replace(/\{\*(.*?)\*\}/g, '{*}$1{*}')
+      // restore Jira strong emphasis {*text*}
+      .replace(/\{\*(.*?)\*\}/g, '{*}$1{*}')
 
-    .trim();
+      .trim();
 
   return result;
 }
@@ -513,7 +513,6 @@ export default function PokerRoom({ name, onLeaveRoom }) {
   const [jiraConnected, setJiraConnected] = useState(false); // Add Jira connection status
   const [hasRestoredState, setHasRestoredState] = useState(false);
   const [skipNextVoteUpdate, setSkipNextVoteUpdate] = useState(false);
-  const [storyResults, setStoryResults] = useState({}); // Store results for each story
 
   // Refs for editors
   const acceptanceEditorRef = useRef(null);
@@ -536,144 +535,144 @@ export default function PokerRoom({ name, onLeaveRoom }) {
   ];
 
   // Load saved story data from localStorage on initial render
-    // Load saved story data from localStorage on initial render
-    useEffect(() => {
-      if (roomId && !hasRestoredState) {
-        const savedStoryData = localStorage.getItem(`storyData_${roomId}`);
-        if (savedStoryData) {
-          const parsed = JSON.parse(savedStoryData);
+  // Load saved story data from localStorage on initial render
+  useEffect(() => {
+    if (roomId && !hasRestoredState) {
+      const savedStoryData = localStorage.getItem(`storyData_${roomId}`);
+      if (savedStoryData) {
+        const parsed = JSON.parse(savedStoryData);
 
-          // Check if data is older than 24 hours (86400000 milliseconds)
-          if (parsed.savedAt) {
-            const savedTime = new Date(parsed.savedAt).getTime();
-            const currentTime = new Date().getTime();
-            const timeDiff = currentTime - savedTime;
-            const hoursDiff = timeDiff / (1000 * 60 * 60);
+        // Check if data is older than 24 hours (86400000 milliseconds)
+        if (parsed.savedAt) {
+          const savedTime = new Date(parsed.savedAt).getTime();
+          const currentTime = new Date().getTime();
+          const timeDiff = currentTime - savedTime;
+          const hoursDiff = timeDiff / (1000 * 60 * 60);
 
-            console.log(`Data age: ${hoursDiff.toFixed(2)} hours`);
+          console.log(`Data age: ${hoursDiff.toFixed(2)} hours`);
 
-            if (hoursDiff > 24) {
-              console.log('Data is older than 24 hours, clearing...');
-              // Clear stale data
-              localStorage.removeItem(`storyData_${roomId}`);
-              localStorage.removeItem(`users_${roomId}`);
-              localStorage.removeItem(`observers_${roomId}`);
-              localStorage.removeItem(`admin_${roomId}`);
+          if (hoursDiff > 24) {
+            console.log('Data is older than 24 hours, clearing...');
+            // Clear stale data
+            localStorage.removeItem(`storyData_${roomId}`);
+            localStorage.removeItem(`users_${roomId}`);
+            localStorage.removeItem(`observers_${roomId}`);
+            localStorage.removeItem(`admin_${roomId}`);
 
-              // Reset all states
-              setJiraKey("");
-              setIssueTitle(null);
-              setAcceptanceCriteria(null);
-              setDescription(null);
-              setIssueType(null);
-              setStoryStatus("");
-              setStoryList([]);
-              setCurrentStoryIndex(0);
-              setStoryListInput("");
-              setRevealed(false);
-              setFinalPoint(null);
-              setSelectedCard(null);
-              setVotedUsers([]);
-              setUserVotes({});
-              setUsers({});
-              setObservers({});
-              setResults(null);
+            // Reset all states
+            setJiraKey("");
+            setIssueTitle(null);
+            setAcceptanceCriteria(null);
+            setDescription(null);
+            setIssueType(null);
+            setStoryStatus("");
+            setStoryList([]);
+            setCurrentStoryIndex(0);
+            setStoryListInput("");
+            setRevealed(false);
+            setFinalPoint(null);
+            setSelectedCard(null);
+            setVotedUsers([]);
+            setUserVotes({});
+            setUsers({});
+            setObservers({});
+            setResults(null);
 
-              setIsLoading(false);
-              setHasRestoredState(true);
-              return; // Exit early, don't load stale data
-            }
-          }
-
-          // Only load data if it's not stale
-          setJiraKey(parsed.jiraKey || "");
-          setIssueTitle(parsed.issueTitle || null);
-          setAcceptanceCriteria(parsed.acceptanceCriteria || null);
-          setDescription(parsed.description || null);
-          setIssueType(parsed.issueType || null);
-          setStoryStatus(parsed.storyStatus || "");
-          setStoryList(parsed.storyList || []);
-          setCurrentStoryIndex(parsed.currentStoryIndex || 0);
-          setStoryListInput(parsed.storyListInput || "");
-          setAllStoryDetails(parsed.allStoryDetails || {});
-          setCards(parsed.cards || [0, 1, 2, 3, 5, 8, 13, 21]);
-          setScaleType(parsed.scaleType || 'FIBONACCI');
-
-          // Restore voting state
-          setRevealed(parsed.revealed || false);
-          setFinalPoint(parsed.finalPoint || null);
-          setSelectedCard(parsed.selectedCard || null);
-          setVotedUsers(parsed.votedUsers || []);
-          setUserVotes(parsed.userVotes || {});
-
-          // If there was a final point, we might want to show results
-          if (parsed.results) {
-            console.log("Restoring results from localStorage");
-            setResults(parsed.results);
-            if (parsed.revealed) {
-              setSkipNextVoteUpdate(true); // Skip the first vote update
-            }
-          } else if (parsed.revealed && parsed.userVotes && parsed.users) {
-            // For backward compatibility
-            setResults({
-              votes: parsed.userVotes || {},
-              users: parsed.users || {}
-            });
-            setSkipNextVoteUpdate(true);
+            setIsLoading(false);
+            setHasRestoredState(true);
+            return; // Exit early, don't load stale data
           }
         }
 
-        // Load saved users from localStorage
-        const savedUsers = localStorage.getItem(`users_${roomId}`);
-        if (savedUsers) {
-          const parsedUsers = JSON.parse(savedUsers);
-          // Check if users data has timestamp (if you saved it with timestamp)
-          if (parsedUsers.savedAt) {
-            const savedTime = new Date(parsedUsers.savedAt).getTime();
-            const currentTime = new Date().getTime();
-            const hoursDiff = (currentTime - savedTime) / (1000 * 60 * 60);
+        // Only load data if it's not stale
+        setJiraKey(parsed.jiraKey || "");
+        setIssueTitle(parsed.issueTitle || null);
+        setAcceptanceCriteria(parsed.acceptanceCriteria || null);
+        setDescription(parsed.description || null);
+        setIssueType(parsed.issueType || null);
+        setStoryStatus(parsed.storyStatus || "");
+        setStoryList(parsed.storyList || []);
+        setCurrentStoryIndex(parsed.currentStoryIndex || 0);
+        setStoryListInput(parsed.storyListInput || "");
+        setAllStoryDetails(parsed.allStoryDetails || {});
+        setCards(parsed.cards || [0, 1, 2, 3, 5, 8, 13, 21]);
+        setScaleType(parsed.scaleType || 'FIBONACCI');
 
-            if (hoursDiff <= 24) {
-              setUsers(parsedUsers);
-            } else {
-              localStorage.removeItem(`users_${roomId}`);
-            }
-          } else {
-            setUsers(parsedUsers);
+        // Restore voting state
+        setRevealed(parsed.revealed || false);
+        setFinalPoint(parsed.finalPoint || null);
+        setSelectedCard(parsed.selectedCard || null);
+        setVotedUsers(parsed.votedUsers || []);
+        setUserVotes(parsed.userVotes || {});
+
+        // If there was a final point, we might want to show results
+        if (parsed.results) {
+          console.log("Restoring results from localStorage");
+          setResults(parsed.results);
+          if (parsed.revealed) {
+            setSkipNextVoteUpdate(true); // Skip the first vote update
           }
+        } else if (parsed.revealed && parsed.userVotes && parsed.users) {
+          // For backward compatibility
+          setResults({
+            votes: parsed.userVotes || {},
+            users: parsed.users || {}
+          });
+          setSkipNextVoteUpdate(true);
         }
-
-        // Load saved observers from localStorage
-        const savedObservers = localStorage.getItem(`observers_${roomId}`);
-        if (savedObservers) {
-          const parsedObservers = JSON.parse(savedObservers);
-          // Check if observers data has timestamp
-          if (parsedObservers.savedAt) {
-            const savedTime = new Date(parsedObservers.savedAt).getTime();
-            const currentTime = new Date().getTime();
-            const hoursDiff = (currentTime - savedTime) / (1000 * 60 * 60);
-
-            if (hoursDiff <= 24) {
-              setObservers(parsedObservers);
-            } else {
-              localStorage.removeItem(`observers_${roomId}`);
-            }
-          } else {
-            setObservers(parsedObservers);
-          }
-        }
-
-        const savedAdmin = localStorage.getItem(`admin_${roomId}`);
-        if (savedAdmin) {
-          setAdminName(savedAdmin);
-        }
-
-        setHasRestoredState(true);
-        setTimeout(() => {
-          setIsLoading(false);
-        }, 100);
       }
-    }, [roomId, hasRestoredState]);
+
+      // Load saved users from localStorage
+      const savedUsers = localStorage.getItem(`users_${roomId}`);
+      if (savedUsers) {
+        const parsedUsers = JSON.parse(savedUsers);
+        // Check if users data has timestamp (if you saved it with timestamp)
+        if (parsedUsers.savedAt) {
+          const savedTime = new Date(parsedUsers.savedAt).getTime();
+          const currentTime = new Date().getTime();
+          const hoursDiff = (currentTime - savedTime) / (1000 * 60 * 60);
+
+          if (hoursDiff <= 24) {
+            setUsers(parsedUsers);
+          } else {
+            localStorage.removeItem(`users_${roomId}`);
+          }
+        } else {
+          setUsers(parsedUsers);
+        }
+      }
+
+      // Load saved observers from localStorage
+      const savedObservers = localStorage.getItem(`observers_${roomId}`);
+      if (savedObservers) {
+        const parsedObservers = JSON.parse(savedObservers);
+        // Check if observers data has timestamp
+        if (parsedObservers.savedAt) {
+          const savedTime = new Date(parsedObservers.savedAt).getTime();
+          const currentTime = new Date().getTime();
+          const hoursDiff = (currentTime - savedTime) / (1000 * 60 * 60);
+
+          if (hoursDiff <= 24) {
+            setObservers(parsedObservers);
+          } else {
+            localStorage.removeItem(`observers_${roomId}`);
+          }
+        } else {
+          setObservers(parsedObservers);
+        }
+      }
+
+      const savedAdmin = localStorage.getItem(`admin_${roomId}`);
+      if (savedAdmin) {
+        setAdminName(savedAdmin);
+      }
+
+      setHasRestoredState(true);
+      setTimeout(() => {
+        setIsLoading(false);
+      }, 100);
+    }
+  }, [roomId, hasRestoredState]);
 
   // Fetch details for all stories when storyList changes
   useEffect(() => {
@@ -715,55 +714,54 @@ export default function PokerRoom({ name, onLeaveRoom }) {
   }, [roomId, name]);
 
   // Save story data to localStorage whenever it changes
-    // Save story data to localStorage whenever it changes
-    useEffect(() => {
-      if (roomId && !isLoading && hasRestoredState) {
-        const timestamp = new Date().toISOString();
+  // Save story data to localStorage whenever it changes
+  useEffect(() => {
+    if (roomId && !isLoading && hasRestoredState) {
+      const timestamp = new Date().toISOString();
 
-        const storyData = {
-          jiraKey,
-          issueTitle,
-          acceptanceCriteria,
-          description,
-          issueType,
-          storyStatus,
-          storyList,
-          currentStoryIndex,
-          storyListInput,
-          revealed,
-          finalPoint,
-          selectedCard,
-          votedUsers,
-          userVotes,
-          users,
-          results,
-          allStoryDetails,
-          cards,
-          scaleType,
-          storyResults,
-          savedAt: timestamp  // Add timestamp here
-        };
-        localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
+      const storyData = {
+        jiraKey,
+        issueTitle,
+        acceptanceCriteria,
+        description,
+        issueType,
+        storyStatus,
+        storyList,
+        currentStoryIndex,
+        storyListInput,
+        revealed,
+        finalPoint,
+        selectedCard,
+        votedUsers,
+        userVotes,
+        users,
+        results,
+        allStoryDetails,
+        cards,
+        scaleType,
+        savedAt: timestamp  // Add timestamp here
+      };
+      localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
 
-        // Also save users separately with timestamp
-        const usersWithTimestamp = {
-          ...users,
-          savedAt: timestamp
-        };
-        localStorage.setItem(`users_${roomId}`, JSON.stringify(usersWithTimestamp));
+      // Also save users separately with timestamp
+      const usersWithTimestamp = {
+        ...users,
+        savedAt: timestamp
+      };
+      localStorage.setItem(`users_${roomId}`, JSON.stringify(usersWithTimestamp));
 
-        // Save observers with timestamp
-        const observersWithTimestamp = {
-          ...observers,
-          savedAt: timestamp
-        };
-        localStorage.setItem(`observers_${roomId}`, JSON.stringify(observersWithTimestamp));
+      // Save observers with timestamp
+      const observersWithTimestamp = {
+        ...observers,
+        savedAt: timestamp
+      };
+      localStorage.setItem(`observers_${roomId}`, JSON.stringify(observersWithTimestamp));
 
-        console.log(`Data saved at ${timestamp}, revealed: ${revealed}`);
-      }
-    }, [roomId, jiraKey, issueTitle, acceptanceCriteria, description, issueType,
-        storyStatus, storyList, currentStoryIndex, storyListInput, revealed,
-        finalPoint, selectedCard, votedUsers, userVotes, users, observers, results, allStoryDetails, cards, scaleType, isLoading, hasRestoredState, storyResults]);
+      console.log(`Data saved at ${timestamp}, revealed: ${revealed}`);
+    }
+  }, [roomId, jiraKey, issueTitle, acceptanceCriteria, description, issueType,
+    storyStatus, storyList, currentStoryIndex, storyListInput, revealed,
+    finalPoint, selectedCard, votedUsers, userVotes, users, observers, results, allStoryDetails, cards, scaleType, isLoading, hasRestoredState]);
 
   // Update this useEffect to handle reconnection better
   useEffect(() => {
@@ -1050,38 +1048,24 @@ export default function PokerRoom({ name, onLeaveRoom }) {
       }
     });
 
-        socket.on("reveal", (data) => {
-          console.log("Reveal event received:", data);
-          setResults(data);
-          setRevealed(true);
-          setSkipNextVoteUpdate(false);
+    socket.on("reveal", (data) => {
+      console.log("Reveal event received:", data);
+      setResults(data);
+      setRevealed(true);
+      setSkipNextVoteUpdate(false);
 
-          // Save results for current story
-          if (roomId && jiraKey) {
-            setStoryResults(prev => ({
-              ...prev,
-              [jiraKey]: {
-                results: data,
-                revealed: true,
-                votes: data.votes,
-                userVotes: data.votes,
-                votedUsers: Object.keys(data.votes || {}),
-                finalPoint: finalPoint, // Keep final point if exists
-                selectedCard: selectedCard
-              }
-            }));
+      // Save to localStorage
+      if (roomId) {
+        const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
+        storyData.revealed = true;
+        storyData.results = data;
+        storyData.votedUsers = Object.keys(data.votes || {});
+        storyData.userVotes = data.votes || {};
 
-            // Save to localStorage
-            const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
-            storyData.revealed = true;
-            storyData.results = data;
-            storyData.votedUsers = Object.keys(data.votes || {});
-            storyData.userVotes = data.votes || {};
-            storyData.storyResults = storyResults; // Save story results
-            storyData.savedAt = new Date().toISOString();
-            localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
-          }
-        });
+        storyData.savedAt = new Date().toISOString();
+        localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
+      }
+    });
 
     socket.on("storyStatusUpdate", ({ jiraKey: key, status }) => {
       if (jiraKey === key) {
@@ -1119,28 +1103,28 @@ export default function PokerRoom({ name, onLeaveRoom }) {
       setEditingDescriptionVisual(false);
     });
 
-        socket.on("reset", () => {
-          console.log("Reset received");
-          setRevealed(false);
-          setResults(null);
-          setFinalPoint(null);
-          setVotedUsers([]);
-          setSelectedCard(null);
-          setObservers({});
-          setObservingTarget(null);
-          setSkipNextVoteUpdate(false); // Reset skip flag on reset
-          // Save reset state to localStorage
-          if (roomId) {
-            const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
-            storyData.revealed = false;
-            storyData.results = null;
-            storyData.finalPoint = null;
-            storyData.votedUsers = [];
-            storyData.userVotes = {};
-            storyData.savedAt = new Date().toISOString();
-            localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
-          }
-        });
+    socket.on("reset", () => {
+      console.log("Reset received");
+      setRevealed(false);
+      setResults(null);
+      setFinalPoint(null);
+      setVotedUsers([]);
+      setSelectedCard(null);
+      setObservers({});
+      setObservingTarget(null);
+      setSkipNextVoteUpdate(false); // Reset skip flag on reset
+      // Save reset state to localStorage
+      if (roomId) {
+        const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
+        storyData.revealed = false;
+        storyData.results = null;
+        storyData.finalPoint = null;
+        storyData.votedUsers = [];
+        storyData.userVotes = {};
+        storyData.savedAt = new Date().toISOString();
+        localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
+      }
+    });
 
     socket.on("admin", (data) => {
       console.log("Admin set/updated:", data);
@@ -1153,66 +1137,39 @@ export default function PokerRoom({ name, onLeaveRoom }) {
       }
     });
 
-        socket.on("voteUpdate", (data) => {
-          console.log("Vote update received:", data);
+    socket.on("voteUpdate", (data) => {
+      console.log("Vote update received:", data);
 
-          if (skipNextVoteUpdate) {
-            console.log("Skipping vote update to preserve restored results");
-            setSkipNextVoteUpdate(false);
-            return;
+      if (skipNextVoteUpdate) {
+        console.log("Skipping vote update to preserve restored results");
+        setSkipNextVoteUpdate(false);
+        return;
+      }
+
+      if (data && data.votes) {
+        setVotedUsers(Object.keys(data.votes));
+        setUserVotes(data.votes);
+
+        if (revealed) {
+          console.log("Updating results in revealed state");
+          setResults(data);
+
+        } else {
+          console.log("Not in revealed state, preserving existing results");
+        }
+        // Save to localStorage
+        if (roomId) {
+          const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
+          storyData.votedUsers = Object.keys(data.votes);
+          storyData.userVotes = data.votes;
+          if (revealed) {
+            storyData.results = data;
           }
-
-          if (data && data.votes) {
-            setVotedUsers(Object.keys(data.votes));
-            setUserVotes(data.votes);
-
-            // Save votes for current story
-            if (roomId && jiraKey) {
-              setStoryResults(prev => ({
-                ...prev,
-                [jiraKey]: {
-                  ...prev[jiraKey],
-                  votes: data.votes,
-                  userVotes: data.votes,
-                  votedUsers: Object.keys(data.votes),
-                  revealed: prev[jiraKey]?.revealed || false,
-                  selectedCard: selectedCard
-                }
-              }));
-            }
-
-            if (revealed) {
-              console.log("Updating results in revealed state");
-              setResults(data);
-
-              // Update story results when revealed
-              if (roomId && jiraKey) {
-                setStoryResults(prev => ({
-                  ...prev,
-                  [jiraKey]: {
-                    ...prev[jiraKey],
-                    results: data,
-                    votes: data.votes,
-                    userVotes: data.votes
-                  }
-                }));
-              }
-            }
-
-            // Save to localStorage
-            if (roomId) {
-              const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
-              storyData.votedUsers = Object.keys(data.votes);
-              storyData.userVotes = data.votes;
-              storyData.storyResults = storyResults;
-              if (revealed) {
-                storyData.results = data;
-              }
-              storyData.savedAt = new Date().toISOString();
-              localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
-            }
-          }
-        });
+          storyData.savedAt = new Date().toISOString();
+          localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
+        }
+      }
+    });
 
     socket.on("jiraTransitions", (data) => {
       console.log("Received transitions:", data);
@@ -1285,8 +1242,8 @@ export default function PokerRoom({ name, onLeaveRoom }) {
     if (dropdown) {
       // Remove all status classes
       dropdown.classList.remove(
-        'status-todo', 'status-in-progress', 'status-in-review',
-        'status-done', 'status-closed', 'status-ready', 'status-blocked'
+          'status-todo', 'status-in-progress', 'status-in-review',
+          'status-done', 'status-closed', 'status-ready', 'status-blocked'
       );
 
       // Add the current status class (convert to kebab-case)
@@ -1430,8 +1387,8 @@ export default function PokerRoom({ name, onLeaveRoom }) {
       const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
       storyData.selectedCard = value === selectedCard ? null : value;
       storyData.votedUsers = value === selectedCard
-        ? votedUsers.filter(uid => uid !== currentUserId)
-        : [...votedUsers, currentUserId];
+          ? votedUsers.filter(uid => uid !== currentUserId)
+          : [...votedUsers, currentUserId];
       storyData.savedAt = new Date().toISOString();
       localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
     }
@@ -1528,8 +1485,8 @@ export default function PokerRoom({ name, onLeaveRoom }) {
   };
 
   const allVotesSame = results &&
-    Object.values(results.votes).length > 1 &&
-    Object.values(results.votes).every(v => v === Object.values(results.votes)[0]);
+      Object.values(results.votes).length > 1 &&
+      Object.values(results.votes).every(v => v === Object.values(results.votes)[0]);
 
   const observedVote = observingTarget && userVotes ? userVotes[observingTarget] : null;
 
@@ -1640,1146 +1597,1029 @@ export default function PokerRoom({ name, onLeaveRoom }) {
   };
 
   return (
-    <div className={`poker-room ${storyList.length > 0 ? 'with-sidebar' : ''}`}>
-      {/* Story Queue Sidebar */}
-      {storyList.length > 0 && (
-        <StoryQueue
-          stories={storyList.map((key) => {
-            const details = allStoryDetails[key] || {};
-            const isCurrent = key === storyList[currentStoryIndex];
+      <div className={`poker-room ${storyList.length > 0 ? 'with-sidebar' : ''}`}>
+        {/* Story Queue Sidebar */}
+        {storyList.length > 0 && (
+            <StoryQueue
+                stories={storyList.map((key) => {
+                  const details = allStoryDetails[key] || {};
+                  const isCurrent = key === storyList[currentStoryIndex];
 
-            return {
-              key,
-              summary: details.summary || (isCurrent ? (issueTitle || `Loading ${key}...`) : `Loading ${key}...`),
-              type: details.type || (isCurrent ? issueType : null),
-              status: details.status || (isCurrent ? storyStatus : "To Do"),
-              point: isCurrent && finalPoint ? finalPoint : null
-            };
-          })}
-          currentStoryIndex={currentStoryIndex}
-          onSelectStory={(index) => {
-            const selectedKey = storyList[index];
+                  return {
+                    key,
+                    summary: details.summary || (isCurrent ? (issueTitle || `Loading ${key}...`) : `Loading ${key}...`),
+                    type: details.type || (isCurrent ? issueType : null),
+                    status: details.status || (isCurrent ? storyStatus : "To Do"),
+                    point: isCurrent && finalPoint ? finalPoint : null
+                  };
+                })}
+                currentStoryIndex={currentStoryIndex}
+                onSelectStory={(index) => {
+                  setCurrentStoryIndex(index);
+                  setRevealed(false);
+                  setResults(null);
+                  setFinalPoint(null);
+                  setObservingTarget(null);
+                  setEditingAcceptance(false);
+                  setEditingAcceptanceVisual(false);
+                  setEditingDescription(false);
+                  setEditingDescriptionVisual(false);
+                  const selectedKey = storyList[index];
+                  if (selectedKey) {
+                    setJiraKey(selectedKey);
+                    if (jiraConnected) {
+                      socket.emit("fetchJiraDetails", { roomId, jiraKey: selectedKey });
+                    }
+                  }
+                  socket.emit("reset", { roomId });
+                }}
 
-            // Save current story results before switching
-            if (jiraKey && (revealed || userVotes)) {
-              setStoryResults(prev => ({
-                ...prev,
-                [jiraKey]: {
-                  results: results,
-                  revealed: revealed,
-                  votes: userVotes,
-                  userVotes: userVotes,
-                  votedUsers: votedUsers,
-                  finalPoint: finalPoint,
-                  selectedCard: selectedCard
-                }
-              }));
-            }
+                onAddStories={(newStories) => {
+                  const keys = newStories.map(s => s.key);
+                  setStoryList([...storyList, ...keys]);
 
-            // Switch to new story
-            setCurrentStoryIndex(index);
+                  // Immediately fetch details for the new stories
+                  if (jiraConnected) {
+                    setTimeout(() => {
+                      socket.emit("fetchMultipleJiraDetails", {
+                        roomId,
+                        issueKeys: keys
+                      });
+                    }, 100);
+                  }
+                }}
+                onRemoveStory={(index) => {
+                  const removedKey = storyList[index];
+                  const newList = [...storyList];
+                  newList.splice(index, 1);
+                  setStoryList(newList);
 
-            // Restore results for the selected story if they exist
-            if (selectedKey && storyResults[selectedKey]) {
-              const saved = storyResults[selectedKey];
-              console.log("Restoring results for story:", selectedKey, saved);
+                  // Remove from allStoryDetails
+                  setAllStoryDetails(prev => {
+                    const updated = { ...prev };
+                    delete updated[removedKey];
+                    return updated;
+                  });
 
-              setResults(saved.results || null);
-              setRevealed(saved.revealed || false);
-              setUserVotes(saved.userVotes || {});
-              setVotedUsers(saved.votedUsers || []);
-              setFinalPoint(saved.finalPoint || null);
-              setSelectedCard(saved.selectedCard || null);
-            } else {
-              // Clear for new story
-              setRevealed(false);
-              setResults(null);
-              setFinalPoint(null);
-              setSelectedCard(null);
-              setVotedUsers([]);
-              setUserVotes({});
-            }
+                  // Adjust current index if needed
+                  if (index === currentStoryIndex) {
+                    setCurrentStoryIndex(Math.max(0, index - 1));
+                  } else if (index < currentStoryIndex) {
+                    setCurrentStoryIndex(currentStoryIndex - 1);
+                  }
+                }}
+                onReorderStories={(newList) => {
+                  console.log('Reordering stories:', newList);
+                  console.log('Current storyList:', storyList);
+                  console.log('Current index:', currentStoryIndex);
 
-            setObservingTarget(null);
-            setEditingAcceptance(false);
-            setEditingAcceptanceVisual(false);
-            setEditingDescription(false);
-            setEditingDescriptionVisual(false);
+                  // Get the current key as a string
+                  const currentKey = storyList[currentStoryIndex];
+                  console.log('Looking for key:', currentKey);
 
-            if (selectedKey) {
-              setJiraKey(selectedKey);
-              if (jiraConnected) {
-                socket.emit("fetchJiraDetails", { roomId, jiraKey: selectedKey });
-              }
-            }
+                  // Find the new index by comparing the key property of each object
+                  const newIndex = newList.findIndex(item => item.key === currentKey);
+                  console.log('Found at index:', newIndex);
 
-            // IMPORTANT: Remove the socket.emit("reset") call to preserve votes
-            // socket.emit("reset", { roomId }); // COMMENT THIS OUT OR REMOVE
-          }}
-//             socket.emit("reset", { roomId });
+                  // Extract just the keys for the storyList state
+                  const newKeyList = newList.map(item => item.key);
+                  console.log('New key list:', newKeyList);
 
-          onAddStories={(newStories) => {
-            const keys = newStories.map(s => s.key);
-            setStoryList([...storyList, ...keys]);
+                  // Update the story list with just the keys
+                  setStoryList(newKeyList);
 
-            // Immediately fetch details for the new stories
-            if (jiraConnected) {
-              setTimeout(() => {
-                socket.emit("fetchMultipleJiraDetails", {
-                  roomId,
-                  issueKeys: keys
-                });
-              }, 100);
-            }
-          }}
-          onRemoveStory={(index) => {
-            const removedKey = storyList[index];
-            const newList = [...storyList];
-            newList.splice(index, 1);
-            setStoryList(newList);
+                  // Update the current index if found
+                  if (newIndex !== -1) {
+                    console.log('Updating current index to:', newIndex);
+                    setCurrentStoryIndex(newIndex);
+                  }
 
-            // Remove from allStoryDetails
-            setAllStoryDetails(prev => {
-              const updated = { ...prev };
-              delete updated[removedKey];
-              return updated;
-            });
-
-            // Adjust current index if needed
-            if (index === currentStoryIndex) {
-              setCurrentStoryIndex(Math.max(0, index - 1));
-            } else if (index < currentStoryIndex) {
-              setCurrentStoryIndex(currentStoryIndex - 1);
-            }
-          }}
-          onReorderStories={(newList) => {
-            console.log('Reordering stories:', newList);
-            console.log('Current storyList:', storyList);
-            console.log('Current index:', currentStoryIndex);
-
-            // Get the current key as a string
-            const currentKey = storyList[currentStoryIndex];
-            console.log('Looking for key:', currentKey);
-
-            // Find the new index by comparing the key property of each object
-            const newIndex = newList.findIndex(item => item.key === currentKey);
-            console.log('Found at index:', newIndex);
-
-            // Extract just the keys for the storyList state
-            const newKeyList = newList.map(item => item.key);
-            console.log('New key list:', newKeyList);
-
-            // Update the story list with just the keys
-            setStoryList(newKeyList);
-
-            // Update the current index if found
-            if (newIndex !== -1) {
-              console.log('Updating current index to:', newIndex);
-              setCurrentStoryIndex(newIndex);
-            }
-
-            // Save to localStorage
-            try {
-              const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
-              storyData.storyList = newKeyList;
-              storyData.currentStoryIndex = newIndex !== -1 ? newIndex : currentStoryIndex;
-              storyData.savedAt = new Date().toISOString();
-              localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
-            } catch (error) {
-              console.error('Error saving to localStorage:', error);
-            }
-          }}
-          isAdmin={isAdmin}
-          votes={userVotes}
-          revealed={revealed}
-          finalPoint={finalPoint}
-        />
-      )}
-      <div className="poker-container">
-        {/* Header */}
-        <div className="room-header">
-          <div className="room-title-container">
-            <h1 className="room-title">
-              {roomName ? `${roomName} - ` : ''}
-              <span className="room-id-wrapper">
+                  // Save to localStorage
+                  try {
+                    const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
+                    storyData.storyList = newKeyList;
+                    storyData.currentStoryIndex = newIndex !== -1 ? newIndex : currentStoryIndex;
+                    storyData.savedAt = new Date().toISOString();
+                    localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
+                  } catch (error) {
+                    console.error('Error saving to localStorage:', error);
+                  }
+                }}
+                isAdmin={isAdmin}
+                votes={userVotes}
+                revealed={revealed}
+                finalPoint={finalPoint}
+            />
+        )}
+        <div className="poker-container">
+          {/* Header */}
+          <div className="room-header">
+            <div className="room-title-container">
+              <h1 className="room-title">
+                {roomName ? `${roomName} - ` : ''}
+                <span className="room-id-wrapper">
                 Room: {roomId}
-                <button
-                  className="copy-room-id-btn"
-                  onClick={copyRoomIdToClipboard}
-                  title="Copy room ID to clipboard"
-                >
+                  <button
+                      className="copy-room-id-btn"
+                      onClick={copyRoomIdToClipboard}
+                      title="Copy room ID to clipboard"
+                  >
                   {roomIdCopied ? <FaCopy className="copy-icon copied" /> : <FaRegCopy className="copy-icon" />}
                 </button>
               </span>
-            </h1>
-            {roomName && <span className="room-name-badge">{roomName}</span>}
-          </div>
-          <div className="header-actions">
-            {!jiraConnected && storyList.length > 0 && (
-              <div className="jira-warning-badge" title="Jira integration is not enabled for this room">
-                ⚠️ Jira Disabled
-              </div>
-            )}
-            {isCurrentUserObserver && (
-              <div className="observer-badge">
-                <FaUserSecret className="observer-badge-icon" />
-                <span>Observer Mode</span>
-              </div>
-            )}
-            {jiraKey && jiraConnected && (
-              <div className="story-badge" onClick={() => copyToClipboard(jiraKey)} title="Click to copy Jira key">
-                <span className="story-key">{jiraKey}</span>
-                {copied ? <FaCopy className="copy-icon copied" /> : <FaRegCopy className="copy-icon" />}
-              </div>
-            )}
-            <button className="leave-room-btn" onClick={handleLeaveRoom} title="Leave Room">
-              🚪 Leave
-            </button>
-          </div>
-        </div>
-        {/* Reconnecting Message */}
-        {isReconnecting && (
-          <div className="reconnecting-message">
-            <div className="spinner"></div>
-            <p>Reconnecting to room...</p>
-          </div>
-        )}
-        {/* Loading Indicator */}
-        {isLoading && (
-          <div className="loading-indicator">
-            <div className="spinner"></div>
-            <p>Loading your session...</p>
-          </div>
-        )}
-        {/* Observing Target Indicator */}
-        {observingTarget && (
-          <div className="observing-indicator">
-            <FaEye className="observing-icon" />
-            <span>
-              Observing <strong>{users[observingTarget]}</strong>'s view
-              {!revealed && observedVote && (
-                <span className="observed-vote"> (Voted: {observedVote})</span>
+              </h1>
+              {roomName && <span className="room-name-badge">{roomName}</span>}
+            </div>
+            <div className="header-actions">
+              {!jiraConnected && storyList.length > 0 && (
+                  <div className="jira-warning-badge" title="Jira integration is not enabled for this room">
+                    ⚠️ Jira Disabled
+                  </div>
               )}
+              {isCurrentUserObserver && (
+                  <div className="observer-badge">
+                    <FaUserSecret className="observer-badge-icon" />
+                    <span>Observer Mode</span>
+                  </div>
+              )}
+              {jiraKey && jiraConnected && (
+                  <div className="story-badge" onClick={() => copyToClipboard(jiraKey)} title="Click to copy Jira key">
+                    <span className="story-key">{jiraKey}</span>
+                    {copied ? <FaCopy className="copy-icon copied" /> : <FaRegCopy className="copy-icon" />}
+                  </div>
+              )}
+              <button className="leave-room-btn" onClick={handleLeaveRoom} title="Leave Room">
+                🚪 Leave
+              </button>
+            </div>
+          </div>
+          {/* Reconnecting Message */}
+          {isReconnecting && (
+              <div className="reconnecting-message">
+                <div className="spinner"></div>
+                <p>Reconnecting to room...</p>
+              </div>
+          )}
+          {/* Loading Indicator */}
+          {isLoading && (
+              <div className="loading-indicator">
+                <div className="spinner"></div>
+                <p>Loading your session...</p>
+              </div>
+          )}
+          {/* Observing Target Indicator */}
+          {observingTarget && (
+              <div className="observing-indicator">
+                <FaEye className="observing-icon" />
+                <span>
+              Observing <strong>{users[observingTarget]}</strong>'s view
+                  {!revealed && observedVote && (
+                      <span className="observed-vote"> (Voted: {observedVote})</span>
+                  )}
             </span>
-            <button
-              className="stop-observing-btn"
-              onClick={() => setObservingTarget(null)}
-            >
-              Stop Observing
-            </button>
-          </div>
-        )}
+                <button
+                    className="stop-observing-btn"
+                    onClick={() => setObservingTarget(null)}
+                >
+                  Stop Observing
+                </button>
+              </div>
+          )}
 
-        {/* Participants Section */}
-        <div className="participants-section">
-          <div className="section-header">
-            <FaUsers className="section-icon" />
-            <h3>Participants ({Object.keys(users).length})</h3>
-            {isAdmin && (
-              <span className="observer-hint">(Click 👁️ to toggle observer mode)</span>
-            )}
-          </div>
-          <div className="participants-grid">
-            {Object.entries(users).map(([userId, userName]) => {
-              if (!userId || !userName) return null;
-              const hasVoted = !revealed && votedUsers.includes(userId);
-              const backgroundColor = getAvatarColor(userName);
-              const isObserver = observers[userId];
-              const isCurrentUser = userName === name;
-              const isObserving = observingTarget === userId;
+          {/* Participants Section */}
+          <div className="participants-section">
+            <div className="section-header">
+              <FaUsers className="section-icon" />
+              <h3>Participants ({Object.keys(users).length})</h3>
+              {isAdmin && (
+                  <span className="observer-hint">(Click 👁️ to toggle observer mode)</span>
+              )}
+            </div>
+            <div className="participants-grid">
+              {Object.entries(users).map(([userId, userName]) => {
+                if (!userId || !userName) return null;
+                const hasVoted = !revealed && votedUsers.includes(userId);
+                const backgroundColor = getAvatarColor(userName);
+                const isObserver = observers[userId];
+                const isCurrentUser = userName === name;
+                const isObserving = observingTarget === userId;
 
-              return (
-                <div
-                  key={userId}
-                  className={`participant-card
+                return (
+                    <div
+                        key={userId}
+                        className={`participant-card
                     ${hasVoted ? 'voted' : ''}
                     ${isObserver ? 'observer' : ''}
                     ${isObserving ? 'observing' : ''}
                     ${isCurrentUser ? 'current-user' : ''}
                   `}
-                >
-                  <div className="participant-avatar" style={{ backgroundColor }}>
-                    {getInitials(userName)}
-                    {isObserver && <FaUserSecret className="observer-icon" />}
-                  </div>
-                  <span className="participant-name">{userName}</span>
-                  {userName === adminName && (
-                    <span className="admin-crown" title="Room Admin">👑</span>
-                  )}
-
-                  {isAdmin && (
-                    <button
-                      className={`observer-toggle-btn ${isObserver ? 'active' : ''}`}
-                      onClick={() => toggleObserver(userId)}
-                      title={isObserver ? "Remove observer rights" : "Make observer"}
                     >
-                      <FaEye />
-                    </button>
-                  )}
-
-                  {isCurrentUserObserver && !isCurrentUser && (
-                    <button
-                      className={`observe-btn ${isObserving ? 'active' : ''}`}
-                      onClick={() => observeUser(userId)}
-                      title={`Observe ${userName}'s view`}
-                    >
-                      <FaEye />
-                    </button>
-                  )}
-
-                  {hasVoted && !isObserver && <FaCheck className="vote-check" />}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Story Card */}
-        {(issueTitle || acceptanceCriteria || description) && (
-          <div className="story-card">
-            <div className="story-card-header">
-              <span className="story-type">{issueType || 'Story'}</span>
-              {!jiraConnected && storyList.length > 0 && (
-                <span className="jira-disabled-badge">Jira integration disabled</span>
-              )}
-              {storyList.length > 0 && (
-                <div className="story-progress-container">
-                  <button
-                    className="progress-nav-btn"
-                    onClick={() => {
-                      if (currentStoryIndex > 0) {
-                        const previousKey = storyList[currentStoryIndex - 1];
-
-                        // Save current story results
-                        if (jiraKey && (revealed || userVotes)) {
-                          setStoryResults(prev => ({
-                            ...prev,
-                            [jiraKey]: {
-                              results: results,
-                              revealed: revealed,
-                              votes: userVotes,
-                              userVotes: userVotes,
-                              votedUsers: votedUsers,
-                              finalPoint: finalPoint,
-                              selectedCard: selectedCard
-                            }
-                          }));
-                        }
-
-                        // Switch to previous story
-                        setCurrentStoryIndex(currentStoryIndex - 1);
-
-                        // Restore results for the previous story
-                        if (previousKey && storyResults[previousKey]) {
-                          const saved = storyResults[previousKey];
-                          console.log("Restoring results for story:", previousKey, saved);
-
-                          setResults(saved.results || null);
-                          setRevealed(saved.revealed || false);
-                          setUserVotes(saved.userVotes || {});
-                          setVotedUsers(saved.votedUsers || []);
-                          setFinalPoint(saved.finalPoint || null);
-                          setSelectedCard(saved.selectedCard || null);
-                        } else {
-                          setRevealed(false);
-                          setResults(null);
-                          setFinalPoint(null);
-                          setSelectedCard(null);
-                          setVotedUsers([]);
-                          setUserVotes({});
-                        }
-
-                        setIssueTitle(null);
-                        setAcceptanceCriteria(null);
-                        setDescription(null);
-                        setObservingTarget(null);
-                        setEditingAcceptance(false);
-                        setEditingAcceptanceVisual(false);
-                        setEditingDescription(false);
-                        setEditingDescriptionVisual(false);
-
-                        // IMPORTANT: Remove the socket.emit("reset") call
-                        // socket.emit("reset", { roomId }); // COMMENT THIS OUT
-                      }
-                    }}
-                    disabled={currentStoryIndex === 0}
-                    title="Previous Story"
-                  >
-                    <FaArrowLeft />
-                  </button>
-                  <span className="story-progress">
-                    {currentStoryIndex + 1} / {storyList.length}
-                  </span>
-                  <button
-                    className="progress-nav-btn"
-                    onClick={() => {
-                      if (currentStoryIndex < storyList.length - 1) {
-                        const nextKey = storyList[currentStoryIndex + 1];
-
-                        // Save current story results
-                        if (jiraKey && (revealed || userVotes)) {
-                          setStoryResults(prev => ({
-                            ...prev,
-                            [jiraKey]: {
-                              results: results,
-                              revealed: revealed,
-                              votes: userVotes,
-                              userVotes: userVotes,
-                              votedUsers: votedUsers,
-                              finalPoint: finalPoint,
-                              selectedCard: selectedCard
-                            }
-                          }));
-                        }
-
-                        // Switch to next story
-                        setCurrentStoryIndex(currentStoryIndex + 1);
-
-                        // Restore results for the next story
-                        if (nextKey && storyResults[nextKey]) {
-                          const saved = storyResults[nextKey];
-                          console.log("Restoring results for story:", nextKey, saved);
-
-                          setResults(saved.results || null);
-                          setRevealed(saved.revealed || false);
-                          setUserVotes(saved.userVotes || {});
-                          setVotedUsers(saved.votedUsers || []);
-                          setFinalPoint(saved.finalPoint || null);
-                          setSelectedCard(saved.selectedCard || null);
-                        } else {
-                          setRevealed(false);
-                          setResults(null);
-                          setFinalPoint(null);
-                          setSelectedCard(null);
-                          setVotedUsers([]);
-                          setUserVotes({});
-                        }
-
-                        setIssueTitle(null);
-                        setAcceptanceCriteria(null);
-                        setDescription(null);
-                        setObservingTarget(null);
-                        setEditingAcceptance(false);
-                        setEditingAcceptanceVisual(false);
-                        setEditingDescription(false);
-                        setEditingDescriptionVisual(false);
-
-                        // IMPORTANT: Remove the socket.emit("reset") call
-                        // socket.emit("reset", { roomId }); // COMMENT THIS OUT
-                      }
-                    }}
-                    disabled={currentStoryIndex >= storyList.length - 1}
-                    title="Next Story"
-                  >
-                    <FaArrowRight />
-                  </button>
-                </div>
-              )}
-            </div>
-            <h2 className="story-title">{issueTitle || 'Loading story...'}</h2>
-
-            {jiraConnected && (
-              <div className="story-status-dropdown">
-                <label htmlFor="story-status-select">Status: </label>
-                {isLoadingTransitions ? (
-                  <select disabled>
-                    <option>Loading transitions...</option>
-                  </select>
-                ) : (
-                  <select
-                    id="story-status-select"
-                    value={storyStatus}
-                    onChange={handleStatusChange}
-                    onClick={() => {
-                      // Fetch transitions when dropdown is clicked
-                      if (jiraKey && isAdmin && jiraConnected) {
-                        fetchAvailableTransitions(jiraKey);
-                      }
-                    }}
-                    disabled={isCurrentUserObserver || !isAdmin}
-                  >
-                    {availableTransitions.length > 0 ? (
-                      availableTransitions.map(status => (
-                        <option key={status} value={status}>{status}</option>
-                      ))
-                    ) : (
-                      <option value={storyStatus}>{storyStatus}</option>
-                    )}
-                  </select>
-                )}
-              </div>
-            )}
-
-            <div className="story-actions">
-              {acceptanceCriteria && (
-                <button
-                  className={`story-action-btn ${showAcceptance ? 'active' : ''}`}
-                  onClick={() => setShowAcceptance(!showAcceptance)}
-                >
-                  {showAcceptance ? <FaEyeSlash /> : <FaEye />}
-                  Acceptance Criteria
-                </button>
-              )}
-              {description && (
-                <button
-                  className={`story-action-btn ${showDescription ? 'active' : ''}`}
-                  onClick={() => setShowDescription(!showDescription)}
-                >
-                  {showDescription ? <FaEyeSlash /> : <FaEye />}
-                  Description
-                </button>
-              )}
-              {(acceptanceCriteria || description) && (
-                <button
-                  className="story-action-btn"
-                  onClick={() => setShowVisual(!showVisual)}
-                >
-                  {showVisual ? <FaMarkdown /> : <FaEye />}
-                  {showVisual ? 'Raw Text' : 'Formatted View'}
-                </button>
-              )}
-            </div>
-
-            {showAcceptance && acceptanceCriteria && (
-              <div className="story-content">
-                <div className="content-header">
-                  <strong>Acceptance Criteria</strong>
-                  {isAdmin && !editingAcceptance && !editingAcceptanceVisual && !isCurrentUserObserver && jiraConnected && (
-                    <div className="edit-buttons">
-                      <button
-                        className="edit-btn"
-                        onClick={() => {
-                          setEditingAcceptance(true);
-                          setEditAcceptanceValue(acceptanceCriteria);
-                        }}
-                        title="Edit in raw text mode"
-                      >
-                        <FaPencilAlt /> Raw
-                      </button>
-                      <button
-                        className="edit-btn visual-edit-btn"
-                        onClick={() => {
-                          setEditingAcceptanceVisual(true);
-                        }}
-                        title="Edit in formatted mode"
-                      >
-                        <FaEye /> Formatted
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {!editingAcceptance && !editingAcceptanceVisual ? (
-                  showVisual ? (
-                    <div
-                      className="jira-content formatted-view"
-                      dangerouslySetInnerHTML={{ __html: jiraWikiToHtml(acceptanceCriteria) }}
-                    />
-                  ) : (
-                    <pre className="text-content raw-view">{acceptanceCriteria}</pre>
-                  )
-                ) : editingAcceptance ? (
-                  <div className="edit-mode raw-edit-mode">
-                    <textarea
-                      value={editAcceptanceValue}
-                      onChange={e => setEditAcceptanceValue(e.target.value)}
-                      rows={12}
-                      className="raw-editor"
-                      placeholder="Enter Jira wiki markup..."
-                    />
-                    <div className="edit-actions">
-                      <button className="btn-save" onClick={handleSaveAcceptance}>Save</button>
-                      <button className="btn-cancel" onClick={() => setEditingAcceptance(false)}>Cancel</button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="edit-mode visual-edit-mode">
-                    <div className="visual-edit-toolbar">
-                      <button
-                        className="toolbar-btn"
-                        onClick={() => applyFormatting('bold', null, 'acceptance')}
-                        title="Bold"
-                        type="button"
-                      >
-                        <FaBold />
-                      </button>
-                      <button
-                        className="toolbar-btn"
-                        onClick={() => applyFormatting('italic', null, 'acceptance')}
-                        title="Italic"
-                        type="button"
-                      >
-                        <FaItalic />
-                      </button>
-                      <button
-                        className="toolbar-btn"
-                        onClick={() => applyFormatting('underline', null, 'acceptance')}
-                        title="Underline"
-                        type="button"
-                      >
-                        <FaUnderline />
-                      </button>
-                      <div className="toolbar-divider"></div>
-                      <button
-                        className="toolbar-btn"
-                        onClick={() => applyFormatting('insertUnorderedList', null, 'acceptance')}
-                        title="Bullet List"
-                        type="button"
-                      >
-                        <FaListUl />
-                      </button>
-                      <button
-                        className="toolbar-btn"
-                        onClick={() => applyFormatting('insertOrderedList', null, 'acceptance')}
-                        title="Numbered List"
-                        type="button"
-                      >
-                        <FaListOl />
-                      </button>
-                      <div className="toolbar-divider"></div>
-                      <button
-                        className="toolbar-btn"
-                        onClick={() => applyFormatting('formatBlock', 'h3', 'acceptance')}
-                        title="Heading"
-                        type="button"
-                      >
-                        <FaHeading />
-                      </button>
-                      <button
-                        className="toolbar-btn"
-                        onClick={() => insertJiraFormatting('code', 'acceptance')}
-                        title="Code"
-                        type="button"
-                      >
-                        <FaCode />
-                      </button>
-                      <span className="toolbar-hint">Editor</span>
-                    </div>
-                    <div
-                      ref={acceptanceEditorRef}
-                      className="visual-editor active"
-                      contentEditable={true}
-                      dangerouslySetInnerHTML={{ __html: editAcceptanceVisualValue }}
-                      suppressContentEditableWarning={true}
-                      style={{
-                        border: '1px solid #ddd',
-                        padding: '16px',
-                        minHeight: '250px',
-                        maxHeight: '500px',
-                        overflowY: 'auto',
-                        borderRadius: '4px',
-                        backgroundColor: 'white',
-                        outline: 'none',
-                        fontFamily: 'Arial, sans-serif',
-                        fontSize: '14px',
-                        lineHeight: '1.5'
-                      }}
-                    />
-                    <div className="edit-actions">
-                      <button className="btn-save" onClick={handleSaveVisualAcceptance}>Save</button>
-                      <button className="btn-cancel" onClick={() => setEditingAcceptanceVisual(false)}>Cancel</button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {showDescription && description && (
-              <div className="story-content">
-                <div className="content-header">
-                  <strong>Description</strong>
-                  {isAdmin && !editingDescription && !editingDescriptionVisual && !isCurrentUserObserver && jiraConnected && (
-                    <div className="edit-buttons">
-                      <button
-                        className="edit-btn"
-                        onClick={() => {
-                          setEditingDescription(true);
-                          setEditDescriptionValue(description);
-                        }}
-                        title="Edit in raw text mode"
-                      >
-                        <FaPencilAlt /> Raw
-                      </button>
-                      <button
-                        className="edit-btn visual-edit-btn"
-                        onClick={() => {
-                          setEditingDescriptionVisual(true);
-                        }}
-                        title="Edit in formatted mode"
-                      >
-                        <FaEye /> Formatted
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {!editingDescription && !editingDescriptionVisual ? (
-                  showVisual ? (
-                    <div
-                      className="jira-content formatted-view"
-                      dangerouslySetInnerHTML={{ __html: jiraWikiToHtml(description) }}
-                    />
-                  ) : (
-                    <pre className="text-content raw-view">{description}</pre>
-                  )
-                ) : editingDescription ? (
-                  <div className="edit-mode raw-edit-mode">
-                    <textarea
-                      value={editDescriptionValue}
-                      onChange={e => setEditDescriptionValue(e.target.value)}
-                      rows={12}
-                      className="raw-editor"
-                      placeholder="Enter Jira wiki markup..."
-                    />
-                    <div className="edit-actions">
-                      <button className="btn-save" onClick={handleSaveDescription}>Save</button>
-                      <button className="btn-cancel" onClick={() => setEditingDescription(false)}>Cancel</button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="edit-mode visual-edit-mode">
-                    <div className="visual-edit-toolbar">
-                      <button
-                        className="toolbar-btn"
-                        onClick={() => applyFormatting('bold', null, 'description')}
-                        title="Bold"
-                        type="button"
-                      >
-                        <FaBold />
-                      </button>
-                      <button
-                        className="toolbar-btn"
-                        onClick={() => applyFormatting('italic', null, 'description')}
-                        title="Italic"
-                        type="button"
-                      >
-                        <FaItalic />
-                      </button>
-                      <button
-                        className="toolbar-btn"
-                        onClick={() => applyFormatting('underline', null, 'description')}
-                        title="Underline"
-                        type="button"
-                      >
-                        <FaUnderline />
-                      </button>
-                      <div className="toolbar-divider"></div>
-                      <button
-                        className="toolbar-btn"
-                        onClick={() => applyFormatting('insertUnorderedList', null, 'description')}
-                        title="Bullet List"
-                        type="button"
-                      >
-                        <FaListUl />
-                      </button>
-                      <button
-                        className="toolbar-btn"
-                        onClick={() => applyFormatting('insertOrderedList', null, 'description')}
-                        title="Numbered List"
-                        type="button"
-                      >
-                        <FaListOl />
-                      </button>
-                      <div className="toolbar-divider"></div>
-                      <button
-                        className="toolbar-btn"
-                        onClick={() => applyFormatting('formatBlock', 'h3', 'description')}
-                        title="Heading"
-                        type="button"
-                      >
-                        <FaHeading />
-                      </button>
-                      <button
-                        className="toolbar-btn"
-                        onClick={() => insertJiraFormatting('code', 'description')}
-                        title="Code"
-                        type="button"
-                      >
-                        <FaCode />
-                      </button>
-                      <span className="toolbar-hint">Editor</span>
-                    </div>
-                    <div
-                      ref={descriptionEditorRef}
-                      className="visual-editor active"
-                      contentEditable={true}
-                      dangerouslySetInnerHTML={{ __html: editDescriptionVisualValue }}
-                      onInput={(e) => {
-                        const el = e.currentTarget;
-                        const savedPos = saveCursorPosition(el);
-                        const html = el.innerHTML;
-                        setEditDescriptionVisualValue(html);
-                        requestAnimationFrame(() => {
-                          if (el && savedPos) restoreCursorPosition(el, savedPos);
-                        });
-                      }}
-                      onBlur={(e) => setEditDescriptionVisualValue(e.currentTarget.innerHTML)}
-                      style={{
-                        border: '1px solid #ddd',
-                        padding: '16px',
-                        minHeight: '250px',
-                        maxHeight: '500px',
-                        overflowY: 'auto',
-                        borderRadius: '4px',
-                        backgroundColor: 'white',
-                        outline: 'none',
-                        fontFamily: 'Arial, sans-serif',
-                        fontSize: '14px',
-                        lineHeight: '1.5'
-                      }}
-                      suppressContentEditableWarning={true}
-                    />
-                    <div className="edit-actions">
-                      <button className="btn-save" onClick={handleSaveVisualDescription}>Save</button>
-                      <button className="btn-cancel" onClick={() => setEditingDescriptionVisual(false)}>Cancel</button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Story List Input (Admin only) */}
-        {!isLoading && !isCurrentUserObserver && isAdmin && storyList.length === 0 && !jiraKey && !issueTitle &&
-         !acceptanceCriteria && !description && (
-          <div className="story-list-input">
-            <h4>Enter Jira Issues</h4>
-            <p className="input-hint">One issue key per line (e.g., PROJ-123)</p>
-            <textarea
-              rows={4}
-              value={storyListInput}
-              onChange={e => setStoryListInput(e.target.value)}
-              placeholder="PROJ-123&#10;PROJ-124&#10;PROJ-125"
-            />
-            <button
-              className="btn-primary"
-              onClick={() => {
-                const list = storyListInput.split(/\r?\n|,|\s+/).map(s => s.trim()).filter(Boolean);
-                setStoryList(list);
-                setCurrentStoryIndex(0);
-              }}
-              disabled={!storyListInput.trim()}
-            >
-              Start Planning
-            </button>
-          </div>
-        )}
-
-        {/* Card Selection Area */}
-        {!revealed && (
-          <div className="voting-section">
-            <h3>Select your estimate</h3>
-
-            {/* Scale Info */}
-            <div className="scale-info">
-              <span className="scale-badge">
-                  {ESTIMATION_SCALES[scaleType]?.name ||
-                   (cards.length > 0 && cards[0] === 'XS' ? 'T-Shirt Sizes' :
-                    cards.length > 0 && typeof cards[0] === 'string' ? 'Custom Text' :
-                    ESTIMATION_SCALES.FIBONACCI.name)}
-                </span>
-            </div>
-
-            {/* Always show cards for non-observers */}
-            {!isCurrentUserObserver && (
-              <div className="cards-grid">
-                {cards.map((c) => (
-                  <Card
-                    key={c}
-                    value={c}
-                    onClick={(value) => {
-                      console.log("Card onClick triggered with value:", value);
-                      handleVote(value);
-                    }}
-                    selected={selectedCard === c}
-                  />
-                ))}
-              </div>
-            )}
-
-            {/* Observer message */}
-            {isCurrentUserObserver && (
-              <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
-                <p>You are in observer mode and cannot vote</p>
-              </div>
-            )}
-
-            {/* Reveal button - ALWAYS show for admin, regardless of observer mode */}
-            {isAdmin && (
-              <button
-                className="btn-reveal"
-                onClick={handleReveal}
-              >
-                <FaEye /> Reveal Votes
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Observer View */}
-        {isCurrentUserObserver && observingTarget && !revealed && (
-          <div className="observer-view">
-            <div className="observer-view-header">
-              <h3>Viewing {users[observingTarget]}'s screen</h3>
-              {observedVote ? (
-                <div className="observed-card">
-                  <span>Selected card: </span>
-                  <strong>{observedVote}</strong>
-                </div>
-              ) : (
-                <p className="no-vote-message">Has not voted yet</p>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Observer placeholder */}
-        {isCurrentUserObserver && !observingTarget && !revealed && (
-          <div className="observer-placeholder">
-            <FaUserSecret className="placeholder-icon" />
-            <h3>You are in Observer Mode</h3>
-            <p>Click the <FaEye /> icon on any participant to view their screen</p>
-          </div>
-        )}
-
-        {/* Results Section */}
-        {revealed && results && (
-          <div className="results-section">
-            <h3>Voting Results</h3>
-
-            {stats && (
-              <div className="stats-wrapper">
-                <div className="stats-header">
-                  <span className="stats-title">📊 Vote Analysis</span>
-                  {allVotesSame && (
-                    <span className="consensus-badge">
-                      <span className="consensus-icon">🎯</span>
-                      Consensus Reached!
-                    </span>
-                  )}
-                </div>
-                <div className="stats-grid">
-                  <div className="stat-card average">
-                    <div className="stat-icon">📈</div>
-                    <div className="stat-content">
-                      <span className="stat-label">Average</span>
-                      <span className="stat-value">{stats.avg}</span>
-                    </div>
-                    <div className="stat-trend">
-                      {stats.avg > 0 && <span className="trend-indicator">↗️</span>}
-                    </div>
-                  </div>
-
-                  <div className="stat-card minimum">
-                    <div className="stat-icon">⬇️</div>
-                    <div className="stat-content">
-                      <span className="stat-label">Minimum</span>
-                      <span className="stat-value">{stats.min}</span>
-                    </div>
-                  </div>
-
-                  <div className="stat-card maximum">
-                    <div className="stat-icon">⬆️</div>
-                    <div className="stat-content">
-                      <span className="stat-label">Maximum</span>
-                      <span className="stat-value">{stats.max}</span>
-                    </div>
-                  </div>
-
-                  <div className="stat-card count">
-                    <div className="stat-icon">👥</div>
-                    <div className="stat-content">
-                      <span className="stat-label">Total Votes</span>
-                      <span className="stat-value">{stats.count}</span>
-                    </div>
-                    <div className="stat-subtitle">
-                      {stats.count === 1 ? 'participant' : 'participants'}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Range Visualization */}
-                {stats.min !== stats.max && (
-                  <div className="vote-range">
-                    <div className="range-label">Vote Range</div>
-                    <div className="range-bar-container">
-                      <div
-                        className="range-bar"
-                        style={{
-                          left: `${(stats.min / stats.max) * 100}%`,
-                          width: `${((stats.max - stats.min) / stats.max) * 100}%`
-                        }}
-                      ></div>
-                      <div className="range-markers">
-                        <span className="range-min">{stats.min}</span>
-                        <span className="range-max">{stats.max}</span>
+                      <div className="participant-avatar" style={{ backgroundColor }}>
+                        {getInitials(userName)}
+                        {isObserver && <FaUserSecret className="observer-icon" />}
                       </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+                      <span className="participant-name">{userName}</span>
+                      {userName === adminName && (
+                          <span className="admin-crown" title="Room Admin">👑</span>
+                      )}
 
-            {allVotesSame && (
-              <div className="celebration">
-                <div className="party-poppers">
-                  <span>🎉</span>
-                  <span>🎊</span>
-                  <span>🎉</span>
-                  <span>✨</span>
-                  <span>🎉</span>
-                </div>
-                <p className="celebration-text">
-                  <span className="celebration-emoji">🏆</span>
-                  Perfect Agreement!
-                  <span className="celebration-emoji">🏆</span>
-                </p>
-                <div className="confetti-dots">
-                  <span>⚡</span>
-                  <span>⭐</span>
-                  <span>⚡</span>
-                </div>
-              </div>
-            )}
+                      {isAdmin && (
+                          <button
+                              className={`observer-toggle-btn ${isObserver ? 'active' : ''}`}
+                              onClick={() => toggleObserver(userId)}
+                              title={isObserver ? "Remove observer rights" : "Make observer"}
+                          >
+                            <FaEye />
+                          </button>
+                      )}
 
-            <div className="votes-grid">
-              {Object.entries(results.votes).map(([id, vote]) => {
-                const isObservedUser = observingTarget === id;
-                return (
-                  <div
-                    key={id}
-                    className={`vote-item ${isObservedUser ? 'observed-vote-item' : ''}`}
-                  >
-                    <div className="voter-info">
-                      <div className="voter-avatar" style={{ backgroundColor: getAvatarColor(results.users[id]) }}>
-                        {getInitials(results.users[id])}
-                        {observers[id] && <FaUserSecret className="voter-observer-icon" />}
-                      </div>
-                      <span className="voter-name">{results.users[id]}</span>
+                      {isCurrentUserObserver && !isCurrentUser && (
+                          <button
+                              className={`observe-btn ${isObserving ? 'active' : ''}`}
+                              onClick={() => observeUser(userId)}
+                              title={`Observe ${userName}'s view`}
+                          >
+                            <FaEye />
+                          </button>
+                      )}
+
+                      {hasVoted && !isObserver && <FaCheck className="vote-check" />}
                     </div>
-                    <span className="vote-value">{vote}</span>
-                    {isObservedUser && <FaEye className="observed-eye" />}
-                  </div>
                 );
               })}
             </div>
+          </div>
 
-            {/* Quick Stats Summary */}
-            {stats && (
-              <div className="stats-footer">
-                <div className="stats-summary">
+          {/* Story Card */}
+          {(issueTitle || acceptanceCriteria || description) && (
+              <div className="story-card">
+                <div className="story-card-header">
+                  <span className="story-type">{issueType || 'Story'}</span>
+                  {!jiraConnected && storyList.length > 0 && (
+                      <span className="jira-disabled-badge">Jira integration disabled</span>
+                  )}
+                  {storyList.length > 0 && (
+                      <div className="story-progress-container">
+                        <button
+                            className="progress-nav-btn"
+                            onClick={() => {
+                              if (currentStoryIndex > 0) {
+                                setCurrentStoryIndex(currentStoryIndex - 1);
+                                setRevealed(false);
+                                setResults(null);
+                                setFinalPoint(null);
+                                setIssueTitle(null);
+                                setAcceptanceCriteria(null);
+                                setDescription(null);
+                                setObservingTarget(null);
+                                setEditingAcceptance(false);
+                                setEditingAcceptanceVisual(false);
+                                setEditingDescription(false);
+                                setEditingDescriptionVisual(false);
+                                socket.emit("reset", { roomId });
+
+
+                              }
+                            }}
+                            disabled={currentStoryIndex === 0}
+                            title="Previous Story"
+                        >
+                          <FaArrowLeft />
+                        </button>
+                        <span className="story-progress">
+                    {currentStoryIndex + 1} / {storyList.length}
+                  </span>
+                        <button
+                            className="progress-nav-btn"
+                            onClick={() => {
+                              if (currentStoryIndex < storyList.length - 1) {
+                                setCurrentStoryIndex(currentStoryIndex + 1);
+                                setRevealed(false);
+                                setResults(null);
+                                setFinalPoint(null);
+                                setIssueTitle(null);
+                                setAcceptanceCriteria(null);
+                                setDescription(null);
+                                setObservingTarget(null);
+                                setEditingAcceptance(false);
+                                setEditingAcceptanceVisual(false);
+                                setEditingDescription(false);
+                                setEditingDescriptionVisual(false);
+                                socket.emit("reset", { roomId });
+                              }
+                            }}
+                            disabled={currentStoryIndex >= storyList.length - 1}
+                            title="Next Story"
+                        >
+                          <FaArrowRight />
+                        </button>
+                      </div>
+                  )}
+                </div>
+                <h2 className="story-title">{issueTitle || 'Loading story...'}</h2>
+
+                {jiraConnected && (
+                    <div className="story-status-dropdown">
+                      <label htmlFor="story-status-select">Status: </label>
+                      {isLoadingTransitions ? (
+                          <select disabled>
+                            <option>Loading transitions...</option>
+                          </select>
+                      ) : (
+                          <select
+                              id="story-status-select"
+                              value={storyStatus}
+                              onChange={handleStatusChange}
+                              onClick={() => {
+                                // Fetch transitions when dropdown is clicked
+                                if (jiraKey && isAdmin && jiraConnected) {
+                                  fetchAvailableTransitions(jiraKey);
+                                }
+                              }}
+                              disabled={isCurrentUserObserver || !isAdmin}
+                          >
+                            {availableTransitions.length > 0 ? (
+                                availableTransitions.map(status => (
+                                    <option key={status} value={status}>{status}</option>
+                                ))
+                            ) : (
+                                <option value={storyStatus}>{storyStatus}</option>
+                            )}
+                          </select>
+                      )}
+                    </div>
+                )}
+
+                <div className="story-actions">
+                  {acceptanceCriteria && (
+                      <button
+                          className={`story-action-btn ${showAcceptance ? 'active' : ''}`}
+                          onClick={() => setShowAcceptance(!showAcceptance)}
+                      >
+                        {showAcceptance ? <FaEyeSlash /> : <FaEye />}
+                        Acceptance Criteria
+                      </button>
+                  )}
+                  {description && (
+                      <button
+                          className={`story-action-btn ${showDescription ? 'active' : ''}`}
+                          onClick={() => setShowDescription(!showDescription)}
+                      >
+                        {showDescription ? <FaEyeSlash /> : <FaEye />}
+                        Description
+                      </button>
+                  )}
+                  {(acceptanceCriteria || description) && (
+                      <button
+                          className="story-action-btn"
+                          onClick={() => setShowVisual(!showVisual)}
+                      >
+                        {showVisual ? <FaMarkdown /> : <FaEye />}
+                        {showVisual ? 'Raw Text' : 'Formatted View'}
+                      </button>
+                  )}
+                </div>
+
+                {showAcceptance && acceptanceCriteria && (
+                    <div className="story-content">
+                      <div className="content-header">
+                        <strong>Acceptance Criteria</strong>
+                        {isAdmin && !editingAcceptance && !editingAcceptanceVisual && !isCurrentUserObserver && jiraConnected && (
+                            <div className="edit-buttons">
+                              <button
+                                  className="edit-btn"
+                                  onClick={() => {
+                                    setEditingAcceptance(true);
+                                    setEditAcceptanceValue(acceptanceCriteria);
+                                  }}
+                                  title="Edit in raw text mode"
+                              >
+                                <FaPencilAlt /> Raw
+                              </button>
+                              <button
+                                  className="edit-btn visual-edit-btn"
+                                  onClick={() => {
+                                    setEditingAcceptanceVisual(true);
+                                  }}
+                                  title="Edit in formatted mode"
+                              >
+                                <FaEye /> Formatted
+                              </button>
+                            </div>
+                        )}
+                      </div>
+
+                      {!editingAcceptance && !editingAcceptanceVisual ? (
+                          showVisual ? (
+                              <div
+                                  className="jira-content formatted-view"
+                                  dangerouslySetInnerHTML={{ __html: jiraWikiToHtml(acceptanceCriteria) }}
+                              />
+                          ) : (
+                              <pre className="text-content raw-view">{acceptanceCriteria}</pre>
+                          )
+                      ) : editingAcceptance ? (
+                          <div className="edit-mode raw-edit-mode">
+                    <textarea
+                        value={editAcceptanceValue}
+                        onChange={e => setEditAcceptanceValue(e.target.value)}
+                        rows={12}
+                        className="raw-editor"
+                        placeholder="Enter Jira wiki markup..."
+                    />
+                            <div className="edit-actions">
+                              <button className="btn-save" onClick={handleSaveAcceptance}>Save</button>
+                              <button className="btn-cancel" onClick={() => setEditingAcceptance(false)}>Cancel</button>
+                            </div>
+                          </div>
+                      ) : (
+                          <div className="edit-mode visual-edit-mode">
+                            <div className="visual-edit-toolbar">
+                              <button
+                                  className="toolbar-btn"
+                                  onClick={() => applyFormatting('bold', null, 'acceptance')}
+                                  title="Bold"
+                                  type="button"
+                              >
+                                <FaBold />
+                              </button>
+                              <button
+                                  className="toolbar-btn"
+                                  onClick={() => applyFormatting('italic', null, 'acceptance')}
+                                  title="Italic"
+                                  type="button"
+                              >
+                                <FaItalic />
+                              </button>
+                              <button
+                                  className="toolbar-btn"
+                                  onClick={() => applyFormatting('underline', null, 'acceptance')}
+                                  title="Underline"
+                                  type="button"
+                              >
+                                <FaUnderline />
+                              </button>
+                              <div className="toolbar-divider"></div>
+                              <button
+                                  className="toolbar-btn"
+                                  onClick={() => applyFormatting('insertUnorderedList', null, 'acceptance')}
+                                  title="Bullet List"
+                                  type="button"
+                              >
+                                <FaListUl />
+                              </button>
+                              <button
+                                  className="toolbar-btn"
+                                  onClick={() => applyFormatting('insertOrderedList', null, 'acceptance')}
+                                  title="Numbered List"
+                                  type="button"
+                              >
+                                <FaListOl />
+                              </button>
+                              <div className="toolbar-divider"></div>
+                              <button
+                                  className="toolbar-btn"
+                                  onClick={() => applyFormatting('formatBlock', 'h3', 'acceptance')}
+                                  title="Heading"
+                                  type="button"
+                              >
+                                <FaHeading />
+                              </button>
+                              <button
+                                  className="toolbar-btn"
+                                  onClick={() => insertJiraFormatting('code', 'acceptance')}
+                                  title="Code"
+                                  type="button"
+                              >
+                                <FaCode />
+                              </button>
+                              <span className="toolbar-hint">Editor</span>
+                            </div>
+                            <div
+                                ref={acceptanceEditorRef}
+                                className="visual-editor active"
+                                contentEditable={true}
+                                dangerouslySetInnerHTML={{ __html: editAcceptanceVisualValue }}
+                                suppressContentEditableWarning={true}
+                                style={{
+                                  border: '1px solid #ddd',
+                                  padding: '16px',
+                                  minHeight: '250px',
+                                  maxHeight: '500px',
+                                  overflowY: 'auto',
+                                  borderRadius: '4px',
+                                  backgroundColor: 'white',
+                                  outline: 'none',
+                                  fontFamily: 'Arial, sans-serif',
+                                  fontSize: '14px',
+                                  lineHeight: '1.5'
+                                }}
+                            />
+                            <div className="edit-actions">
+                              <button className="btn-save" onClick={handleSaveVisualAcceptance}>Save</button>
+                              <button className="btn-cancel" onClick={() => setEditingAcceptanceVisual(false)}>Cancel</button>
+                            </div>
+                          </div>
+                      )}
+                    </div>
+                )}
+
+                {showDescription && description && (
+                    <div className="story-content">
+                      <div className="content-header">
+                        <strong>Description</strong>
+                        {isAdmin && !editingDescription && !editingDescriptionVisual && !isCurrentUserObserver && jiraConnected && (
+                            <div className="edit-buttons">
+                              <button
+                                  className="edit-btn"
+                                  onClick={() => {
+                                    setEditingDescription(true);
+                                    setEditDescriptionValue(description);
+                                  }}
+                                  title="Edit in raw text mode"
+                              >
+                                <FaPencilAlt /> Raw
+                              </button>
+                              <button
+                                  className="edit-btn visual-edit-btn"
+                                  onClick={() => {
+                                    setEditingDescriptionVisual(true);
+                                  }}
+                                  title="Edit in formatted mode"
+                              >
+                                <FaEye /> Formatted
+                              </button>
+                            </div>
+                        )}
+                      </div>
+
+                      {!editingDescription && !editingDescriptionVisual ? (
+                          showVisual ? (
+                              <div
+                                  className="jira-content formatted-view"
+                                  dangerouslySetInnerHTML={{ __html: jiraWikiToHtml(description) }}
+                              />
+                          ) : (
+                              <pre className="text-content raw-view">{description}</pre>
+                          )
+                      ) : editingDescription ? (
+                          <div className="edit-mode raw-edit-mode">
+                    <textarea
+                        value={editDescriptionValue}
+                        onChange={e => setEditDescriptionValue(e.target.value)}
+                        rows={12}
+                        className="raw-editor"
+                        placeholder="Enter Jira wiki markup..."
+                    />
+                            <div className="edit-actions">
+                              <button className="btn-save" onClick={handleSaveDescription}>Save</button>
+                              <button className="btn-cancel" onClick={() => setEditingDescription(false)}>Cancel</button>
+                            </div>
+                          </div>
+                      ) : (
+                          <div className="edit-mode visual-edit-mode">
+                            <div className="visual-edit-toolbar">
+                              <button
+                                  className="toolbar-btn"
+                                  onClick={() => applyFormatting('bold', null, 'description')}
+                                  title="Bold"
+                                  type="button"
+                              >
+                                <FaBold />
+                              </button>
+                              <button
+                                  className="toolbar-btn"
+                                  onClick={() => applyFormatting('italic', null, 'description')}
+                                  title="Italic"
+                                  type="button"
+                              >
+                                <FaItalic />
+                              </button>
+                              <button
+                                  className="toolbar-btn"
+                                  onClick={() => applyFormatting('underline', null, 'description')}
+                                  title="Underline"
+                                  type="button"
+                              >
+                                <FaUnderline />
+                              </button>
+                              <div className="toolbar-divider"></div>
+                              <button
+                                  className="toolbar-btn"
+                                  onClick={() => applyFormatting('insertUnorderedList', null, 'description')}
+                                  title="Bullet List"
+                                  type="button"
+                              >
+                                <FaListUl />
+                              </button>
+                              <button
+                                  className="toolbar-btn"
+                                  onClick={() => applyFormatting('insertOrderedList', null, 'description')}
+                                  title="Numbered List"
+                                  type="button"
+                              >
+                                <FaListOl />
+                              </button>
+                              <div className="toolbar-divider"></div>
+                              <button
+                                  className="toolbar-btn"
+                                  onClick={() => applyFormatting('formatBlock', 'h3', 'description')}
+                                  title="Heading"
+                                  type="button"
+                              >
+                                <FaHeading />
+                              </button>
+                              <button
+                                  className="toolbar-btn"
+                                  onClick={() => insertJiraFormatting('code', 'description')}
+                                  title="Code"
+                                  type="button"
+                              >
+                                <FaCode />
+                              </button>
+                              <span className="toolbar-hint">Editor</span>
+                            </div>
+                            <div
+                                ref={descriptionEditorRef}
+                                className="visual-editor active"
+                                contentEditable={true}
+                                dangerouslySetInnerHTML={{ __html: editDescriptionVisualValue }}
+                                onInput={(e) => {
+                                  const el = e.currentTarget;
+                                  const savedPos = saveCursorPosition(el);
+                                  const html = el.innerHTML;
+                                  setEditDescriptionVisualValue(html);
+                                  requestAnimationFrame(() => {
+                                    if (el && savedPos) restoreCursorPosition(el, savedPos);
+                                  });
+                                }}
+                                onBlur={(e) => setEditDescriptionVisualValue(e.currentTarget.innerHTML)}
+                                style={{
+                                  border: '1px solid #ddd',
+                                  padding: '16px',
+                                  minHeight: '250px',
+                                  maxHeight: '500px',
+                                  overflowY: 'auto',
+                                  borderRadius: '4px',
+                                  backgroundColor: 'white',
+                                  outline: 'none',
+                                  fontFamily: 'Arial, sans-serif',
+                                  fontSize: '14px',
+                                  lineHeight: '1.5'
+                                }}
+                                suppressContentEditableWarning={true}
+                            />
+                            <div className="edit-actions">
+                              <button className="btn-save" onClick={handleSaveVisualDescription}>Save</button>
+                              <button className="btn-cancel" onClick={() => setEditingDescriptionVisual(false)}>Cancel</button>
+                            </div>
+                          </div>
+                      )}
+                    </div>
+                )}
+              </div>
+          )}
+
+          {/* Story List Input (Admin only) */}
+          {!isLoading && !isCurrentUserObserver && isAdmin && storyList.length === 0 && !jiraKey && !issueTitle &&
+              !acceptanceCriteria && !description && (
+                  <div className="story-list-input">
+                    <h4>Enter Jira Issues</h4>
+                    <p className="input-hint">One issue key per line (e.g., PROJ-123)</p>
+                    <textarea
+                        rows={4}
+                        value={storyListInput}
+                        onChange={e => setStoryListInput(e.target.value)}
+                        placeholder="PROJ-123&#10;PROJ-124&#10;PROJ-125"
+                    />
+                    <button
+                        className="btn-primary"
+                        onClick={() => {
+                          const list = storyListInput.split(/\r?\n|,|\s+/).map(s => s.trim()).filter(Boolean);
+                          setStoryList(list);
+                          setCurrentStoryIndex(0);
+                        }}
+                        disabled={!storyListInput.trim()}
+                    >
+                      Start Planning
+                    </button>
+                  </div>
+              )}
+
+          {/* Card Selection Area */}
+          {!revealed && (
+              <div className="voting-section">
+                <h3>Select your estimate</h3>
+
+                {/* Scale Info */}
+                <div className="scale-info">
+              <span className="scale-badge">
+                  {ESTIMATION_SCALES[scaleType]?.name ||
+                      (cards.length > 0 && cards[0] === 'XS' ? 'T-Shirt Sizes' :
+                          cards.length > 0 && typeof cards[0] === 'string' ? 'Custom Text' :
+                              ESTIMATION_SCALES.FIBONACCI.name)}
+                </span>
+                </div>
+
+                {/* Always show cards for non-observers */}
+                {!isCurrentUserObserver && (
+                    <div className="cards-grid">
+                      {cards.map((c) => (
+                          <Card
+                              key={c}
+                              value={c}
+                              onClick={(value) => {
+                                console.log("Card onClick triggered with value:", value);
+                                handleVote(value);
+                              }}
+                              selected={selectedCard === c}
+                          />
+                      ))}
+                    </div>
+                )}
+
+                {/* Observer message */}
+                {isCurrentUserObserver && (
+                    <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+                      <p>You are in observer mode and cannot vote</p>
+                    </div>
+                )}
+
+                {/* Reveal button - ALWAYS show for admin, regardless of observer mode */}
+                {isAdmin && (
+                    <button
+                        className="btn-reveal"
+                        onClick={handleReveal}
+                    >
+                      <FaEye /> Reveal Votes
+                    </button>
+                )}
+              </div>
+          )}
+
+          {/* Observer View */}
+          {isCurrentUserObserver && observingTarget && !revealed && (
+              <div className="observer-view">
+                <div className="observer-view-header">
+                  <h3>Viewing {users[observingTarget]}'s screen</h3>
+                  {observedVote ? (
+                      <div className="observed-card">
+                        <span>Selected card: </span>
+                        <strong>{observedVote}</strong>
+                      </div>
+                  ) : (
+                      <p className="no-vote-message">Has not voted yet</p>
+                  )}
+                </div>
+              </div>
+          )}
+
+          {/* Observer placeholder */}
+          {isCurrentUserObserver && !observingTarget && !revealed && (
+              <div className="observer-placeholder">
+                <FaUserSecret className="placeholder-icon" />
+                <h3>You are in Observer Mode</h3>
+                <p>Click the <FaEye /> icon on any participant to view their screen</p>
+              </div>
+          )}
+
+          {/* Results Section */}
+          {revealed && results && (
+              <div className="results-section">
+                <h3>Voting Results</h3>
+
+                {stats && (
+                    <div className="stats-wrapper">
+                      <div className="stats-header">
+                        <span className="stats-title">📊 Vote Analysis</span>
+                        {allVotesSame && (
+                            <span className="consensus-badge">
+                      <span className="consensus-icon">🎯</span>
+                      Consensus Reached!
+                    </span>
+                        )}
+                      </div>
+                      <div className="stats-grid">
+                        <div className="stat-card average">
+                          <div className="stat-icon">📈</div>
+                          <div className="stat-content">
+                            <span className="stat-label">Average</span>
+                            <span className="stat-value">{stats.avg}</span>
+                          </div>
+                          <div className="stat-trend">
+                            {stats.avg > 0 && <span className="trend-indicator">↗️</span>}
+                          </div>
+                        </div>
+
+                        <div className="stat-card minimum">
+                          <div className="stat-icon">⬇️</div>
+                          <div className="stat-content">
+                            <span className="stat-label">Minimum</span>
+                            <span className="stat-value">{stats.min}</span>
+                          </div>
+                        </div>
+
+                        <div className="stat-card maximum">
+                          <div className="stat-icon">⬆️</div>
+                          <div className="stat-content">
+                            <span className="stat-label">Maximum</span>
+                            <span className="stat-value">{stats.max}</span>
+                          </div>
+                        </div>
+
+                        <div className="stat-card count">
+                          <div className="stat-icon">👥</div>
+                          <div className="stat-content">
+                            <span className="stat-label">Total Votes</span>
+                            <span className="stat-value">{stats.count}</span>
+                          </div>
+                          <div className="stat-subtitle">
+                            {stats.count === 1 ? 'participant' : 'participants'}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Range Visualization */}
+                      {stats.min !== stats.max && (
+                          <div className="vote-range">
+                            <div className="range-label">Vote Range</div>
+                            <div className="range-bar-container">
+                              <div
+                                  className="range-bar"
+                                  style={{
+                                    left: `${(stats.min / stats.max) * 100}%`,
+                                    width: `${((stats.max - stats.min) / stats.max) * 100}%`
+                                  }}
+                              ></div>
+                              <div className="range-markers">
+                                <span className="range-min">{stats.min}</span>
+                                <span className="range-max">{stats.max}</span>
+                              </div>
+                            </div>
+                          </div>
+                      )}
+                    </div>
+                )}
+
+                {allVotesSame && (
+                    <div className="celebration">
+                      <div className="party-poppers">
+                        <span>🎉</span>
+                        <span>🎊</span>
+                        <span>🎉</span>
+                        <span>✨</span>
+                        <span>🎉</span>
+                      </div>
+                      <p className="celebration-text">
+                        <span className="celebration-emoji">🏆</span>
+                        Perfect Agreement!
+                        <span className="celebration-emoji">🏆</span>
+                      </p>
+                      <div className="confetti-dots">
+                        <span>⚡</span>
+                        <span>⭐</span>
+                        <span>⚡</span>
+                      </div>
+                    </div>
+                )}
+
+                <div className="votes-grid">
+                  {Object.entries(results.votes).map(([id, vote]) => {
+                    const isObservedUser = observingTarget === id;
+                    return (
+                        <div
+                            key={id}
+                            className={`vote-item ${isObservedUser ? 'observed-vote-item' : ''}`}
+                        >
+                          <div className="voter-info">
+                            <div className="voter-avatar" style={{ backgroundColor: getAvatarColor(results.users[id]) }}>
+                              {getInitials(results.users[id])}
+                              {observers[id] && <FaUserSecret className="voter-observer-icon" />}
+                            </div>
+                            <span className="voter-name">{results.users[id]}</span>
+                          </div>
+                          <span className="vote-value">{vote}</span>
+                          {isObservedUser && <FaEye className="observed-eye" />}
+                        </div>
+                    );
+                  })}
+                </div>
+
+                {/* Quick Stats Summary */}
+                {stats && (
+                    <div className="stats-footer">
+                      <div className="stats-summary">
                   <span className="summary-item">
                     <span className="summary-dot" style={{ background: '#4CAF50' }}></span>
                     Spread: {stats.max - stats.min} points
                   </span>
-                  <span className="summary-item">
+                        <span className="summary-item">
                     <span className="summary-dot" style={{ background: '#FF9800' }}></span>
                     Median: {stats.min === stats.max ? stats.min : Math.round((stats.min + stats.max) / 2)}
                   </span>
-                </div>
-              </div>
-            )}
+                      </div>
+                    </div>
+                )}
 
-            {/* Admin Controls */}
-            {isAdmin && (
-              <div className="admin-controls">
-                <button
-                  className="btn-reset"
-                  onClick={handleReset}
-                >
-                  <FaUndo /> Reset Voting
-                </button>
+                {/* Admin Controls */}
+                {isAdmin && (
+                    <div className="admin-controls">
+                      <button
+                          className="btn-reset"
+                          onClick={handleReset}
+                      >
+                        <FaUndo /> Reset Voting
+                      </button>
 
-                <div className="finalize-controls">
-                  {storyList.length === 0 && (
-                    <input
-                      type="text"
-                      placeholder="Jira Key"
-                      value={jiraKey}
-                      onChange={e => setJiraKey(e.target.value)}
-                      className="jira-input"
-                      disabled={!jiraConnected}
-                    />
-                  )}
-                  <div className="point-input-group">
-                    <input
-                      type={typeof cards[0] === 'number' ? 'number' : 'text'}
-                      value={customPoint}
-                      onChange={e => {
-                        const val = e.target.value;
-                        if (typeof cards[0] === 'number') {
-                          setCustomPoint(Number(val));
-                        } else {
-                          setCustomPoint(val);
-                        }
-                      }}
-                      min={0}
-                      className="point-input"
-                      placeholder="Final value"
-                    />
-                    <button
-                      className="btn-finalize"
-                      onClick={handleFinalize}
-                      disabled={!jiraConnected && storyList.length === 0}
-                    >
-                      <FaStar /> Finalize {customPoint}
-                    </button>
-                  </div>
-                </div>
+                      <div className="finalize-controls">
+                        {storyList.length === 0 && (
+                            <input
+                                type="text"
+                                placeholder="Jira Key"
+                                value={jiraKey}
+                                onChange={e => setJiraKey(e.target.value)}
+                                className="jira-input"
+                                disabled={!jiraConnected}
+                            />
+                        )}
+                        <div className="point-input-group">
+                          <input
+                              type={typeof cards[0] === 'number' ? 'number' : 'text'}
+                              value={customPoint}
+                              onChange={e => {
+                                const val = e.target.value;
+                                if (typeof cards[0] === 'number') {
+                                  setCustomPoint(Number(val));
+                                } else {
+                                  setCustomPoint(val);
+                                }
+                              }}
+                              min={0}
+                              className="point-input"
+                              placeholder="Final value"
+                          />
+                          <button
+                              className="btn-finalize"
+                              onClick={handleFinalize}
+                              disabled={!jiraConnected && storyList.length === 0}
+                          >
+                            <FaStar /> Finalize {customPoint}
+                          </button>
+                        </div>
+                      </div>
 
-                {storyList.length > 0 && (
-                  <button
-                    className="btn-reset-list"
-                    onClick={() => {
-                      setStoryList([]);
-                      setStoryListInput("");
-                      setCurrentStoryIndex(0);
-                      setJiraKey("");
-                      setRevealed(false);
-                      setResults(null);
-                      setFinalPoint(null);
-                      setIssueTitle(null);
-                      setAcceptanceCriteria(null);
-                      setDescription(null);
-                      setObservingTarget(null);
-                      setEditingAcceptance(false);
-                      setEditingAcceptanceVisual(false);
-                      setEditingDescription(false);
-                      setEditingDescriptionVisual(false);
-                      socket.emit("reset", { roomId });
+                      {storyList.length > 0 && (
+                          <button
+                              className="btn-reset-list"
+                              onClick={() => {
+                                setStoryList([]);
+                                setStoryListInput("");
+                                setCurrentStoryIndex(0);
+                                setJiraKey("");
+                                setRevealed(false);
+                                setResults(null);
+                                setFinalPoint(null);
+                                setIssueTitle(null);
+                                setAcceptanceCriteria(null);
+                                setDescription(null);
+                                setObservingTarget(null);
+                                setEditingAcceptance(false);
+                                setEditingAcceptanceVisual(false);
+                                setEditingDescription(false);
+                                setEditingDescriptionVisual(false);
+                                socket.emit("reset", { roomId });
 
-                      // Clear localStorage for this room
-                      localStorage.removeItem(`storyData_${roomId}`);
-                    }}
-                  >
-                    Reset List
-                  </button>
+                                // Clear localStorage for this room
+                                localStorage.removeItem(`storyData_${roomId}`);
+                              }}
+                          >
+                            Reset List
+                          </button>
+                      )}
+                    </div>
                 )}
               </div>
-            )}
-          </div>
-        )}
+          )}
 
-        {/* Final Point Display */}
-        {finalPoint && (
-          <div className="final-point-card">
-            <div className="final-point-content">
-              <span className="final-point-label">Final Story Point</span>
-              <span className="final-point-value">{finalPoint}</span>
+          {/* Final Point Display */}
+          {finalPoint && (
+              <div className="final-point-card">
+                <div className="final-point-content">
+                  <span className="final-point-label">Final Story Point</span>
+                  <span className="final-point-value">{finalPoint}</span>
+                </div>
+                {issueTitle && <p className="final-story-title">{issueTitle}</p>}
+              </div>
+          )}
+        </div>
+
+        {/* Drop Zone Indicator */}
+        {showDropZone && (
+            <div className="drop-zone-indicator">
+              <FaStar size={32} />
+              <span>Drop to load story for voting</span>
             </div>
-            {issueTitle && <p className="final-story-title">{issueTitle}</p>}
-          </div>
         )}
       </div>
-
-      {/* Drop Zone Indicator */}
-      {showDropZone && (
-        <div className="drop-zone-indicator">
-          <FaStar size={32} />
-          <span>Drop to load story for voting</span>
-        </div>
-      )}
-    </div>
   );
 }
