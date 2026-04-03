@@ -513,10 +513,15 @@ export default function PokerRoom({ name, onLeaveRoom }) {
   const [jiraConnected, setJiraConnected] = useState(false); // Add Jira connection status
   const [hasRestoredState, setHasRestoredState] = useState(false);
   const [skipNextVoteUpdate, setSkipNextVoteUpdate] = useState(false);
+  const [storyVoteHistory, setStoryVoteHistory] = useState({});
 
   // Refs for editors
   const acceptanceEditorRef = useRef(null);
   const descriptionEditorRef = useRef(null);
+
+  // Track whether user is viewing a historical story (not the live voting story).
+  // Using a ref so socket handlers always read the latest value without re-registering.
+  const viewingHistoryRef = useRef(false);
 
   const storyStatuses = [
     "To Do",
@@ -1050,6 +1055,11 @@ export default function PokerRoom({ name, onLeaveRoom }) {
 
     socket.on("reveal", (data) => {
       console.log("Reveal event received:", data);
+      // Don't overwrite historical story results with live voting results
+      if (viewingHistoryRef.current) {
+        console.log("Skipping reveal update: viewing historical story");
+        return;
+      }
       setResults(data);
       setRevealed(true);
       setSkipNextVoteUpdate(false);
@@ -1074,6 +1084,11 @@ export default function PokerRoom({ name, onLeaveRoom }) {
     });
 
     socket.on("final", (data) => {
+      // Don't overwrite historical story's final point with the live story's
+      if (viewingHistoryRef.current) {
+        console.log("Skipping final update: viewing historical story");
+        return;
+      }
       if (typeof data === "object" && data !== null) {
         setFinalPoint(data.point);
         setIssueTitle(data.issueTitle);
@@ -1105,10 +1120,19 @@ export default function PokerRoom({ name, onLeaveRoom }) {
 
     socket.on("reset", () => {
       console.log("Reset received");
+      // If this client is in history mode it means THIS client triggered the reset as part of
+      // navigating to a historical story — skip clearing so the local restore stays intact.
+      if (viewingHistoryRef.current) {
+        console.log("Skipping reset: this client is in history-view mode");
+        return;
+      }
+      // Room moved to a new story — exit history mode so live events are processed again
+      viewingHistoryRef.current = false;
       setRevealed(false);
       setResults(null);
       setFinalPoint(null);
       setVotedUsers([]);
+      setUserVotes({});
       setSelectedCard(null);
       setObservers({});
       setObservingTarget(null);
@@ -1139,6 +1163,12 @@ export default function PokerRoom({ name, onLeaveRoom }) {
 
     socket.on("voteUpdate", (data) => {
       console.log("Vote update received:", data);
+
+      // Don't overwrite historical story votes with live voting progress
+      if (viewingHistoryRef.current) {
+        console.log("Skipping voteUpdate: viewing historical story");
+        return;
+      }
 
       if (skipNextVoteUpdate) {
         console.log("Skipping vote update to preserve restored results");
@@ -1615,23 +1645,57 @@ export default function PokerRoom({ name, onLeaveRoom }) {
                 })}
                 currentStoryIndex={currentStoryIndex}
                 onSelectStory={(index) => {
+                  // Save current story's vote state before switching
+                  const currentKey = storyList[currentStoryIndex];
+                  if (currentKey) {
+                    setStoryVoteHistory(prev => ({
+                      ...prev,
+                      [currentKey]: { results, revealed, finalPoint, userVotes }
+                    }));
+                  }
+
+                  const newKey = storyList[index];
+                  const savedState = storyVoteHistory[newKey];
+
                   setCurrentStoryIndex(index);
-                  setRevealed(false);
-                  setResults(null);
-                  setFinalPoint(null);
+                  setIssueTitle(null);
+                  setAcceptanceCriteria(null);
+                  setDescription(null);
                   setObservingTarget(null);
                   setEditingAcceptance(false);
                   setEditingAcceptanceVisual(false);
                   setEditingDescription(false);
                   setEditingDescriptionVisual(false);
-                  const selectedKey = storyList[index];
-                  if (selectedKey) {
-                    setJiraKey(selectedKey);
+
+                  if (newKey) {
+                    setJiraKey(newKey);
                     if (jiraConnected) {
-                      socket.emit("fetchJiraDetails", { roomId, jiraKey: selectedKey });
+                      socket.emit("fetchJiraDetails", { roomId, jiraKey: newKey });
                     }
                   }
-                  socket.emit("reset", { roomId });
+
+                  if (savedState && (savedState.results || savedState.finalPoint)) {
+                    // Restore previously voted state for admin locally
+                    viewingHistoryRef.current = true;
+                    setRevealed(savedState.revealed || false);
+                    setResults(savedState.results || null);
+                    setFinalPoint(savedState.finalPoint || null);
+                    setUserVotes(savedState.userVotes || {});
+                    // Sync participants: reset then push historical results to them
+                    socket.emit("reset", { roomId });
+                    socket.emit("restore-story-state", {
+                      roomId,
+                      results: savedState.results,
+                      revealed: savedState.revealed,
+                      finalPoint: savedState.finalPoint
+                    });
+                  } else {
+                    viewingHistoryRef.current = false;
+                    setRevealed(false);
+                    setResults(null);
+                    setFinalPoint(null);
+                    socket.emit("reset", { roomId });
+                  }
                 }}
 
                 onAddStories={(newStories) => {
@@ -1864,10 +1928,20 @@ export default function PokerRoom({ name, onLeaveRoom }) {
                             className="progress-nav-btn"
                             onClick={() => {
                               if (currentStoryIndex > 0) {
-                                setCurrentStoryIndex(currentStoryIndex - 1);
-                                setRevealed(false);
-                                setResults(null);
-                                setFinalPoint(null);
+                                // Save current story's vote state before navigating away
+                                const currentKey = storyList[currentStoryIndex];
+                                if (currentKey) {
+                                  setStoryVoteHistory(prev => ({
+                                    ...prev,
+                                    [currentKey]: { results, revealed, finalPoint, userVotes }
+                                  }));
+                                }
+
+                                const newIndex = currentStoryIndex - 1;
+                                const newKey = storyList[newIndex];
+                                const savedState = storyVoteHistory[newKey];
+
+                                setCurrentStoryIndex(newIndex);
                                 setIssueTitle(null);
                                 setAcceptanceCriteria(null);
                                 setDescription(null);
@@ -1876,9 +1950,29 @@ export default function PokerRoom({ name, onLeaveRoom }) {
                                 setEditingAcceptanceVisual(false);
                                 setEditingDescription(false);
                                 setEditingDescriptionVisual(false);
-                                socket.emit("reset", { roomId });
 
-
+                                if (savedState && (savedState.results || savedState.finalPoint)) {
+                                  // Restore previously voted state for admin locally
+                                  viewingHistoryRef.current = true;
+                                  setRevealed(savedState.revealed || false);
+                                  setResults(savedState.results || null);
+                                  setFinalPoint(savedState.finalPoint || null);
+                                  setUserVotes(savedState.userVotes || {});
+                                  // Sync participants: reset then push historical results to them
+                                  socket.emit("reset", { roomId });
+                                  socket.emit("restore-story-state", {
+                                    roomId,
+                                    results: savedState.results,
+                                    revealed: savedState.revealed,
+                                    finalPoint: savedState.finalPoint
+                                  });
+                                } else {
+                                  viewingHistoryRef.current = false;
+                                  setRevealed(false);
+                                  setResults(null);
+                                  setFinalPoint(null);
+                                  socket.emit("reset", { roomId });
+                                }
                               }
                             }}
                             disabled={currentStoryIndex === 0}
@@ -1893,10 +1987,20 @@ export default function PokerRoom({ name, onLeaveRoom }) {
                             className="progress-nav-btn"
                             onClick={() => {
                               if (currentStoryIndex < storyList.length - 1) {
-                                setCurrentStoryIndex(currentStoryIndex + 1);
-                                setRevealed(false);
-                                setResults(null);
-                                setFinalPoint(null);
+                                // Save current story's vote state before navigating away
+                                const currentKey = storyList[currentStoryIndex];
+                                if (currentKey) {
+                                  setStoryVoteHistory(prev => ({
+                                    ...prev,
+                                    [currentKey]: { results, revealed, finalPoint, userVotes }
+                                  }));
+                                }
+
+                                const newIndex = currentStoryIndex + 1;
+                                const newKey = storyList[newIndex];
+                                const savedState = storyVoteHistory[newKey];
+
+                                setCurrentStoryIndex(newIndex);
                                 setIssueTitle(null);
                                 setAcceptanceCriteria(null);
                                 setDescription(null);
@@ -1905,7 +2009,29 @@ export default function PokerRoom({ name, onLeaveRoom }) {
                                 setEditingAcceptanceVisual(false);
                                 setEditingDescription(false);
                                 setEditingDescriptionVisual(false);
-                                socket.emit("reset", { roomId });
+
+                                if (savedState && (savedState.results || savedState.finalPoint)) {
+                                  // Restore previously voted state for admin locally
+                                  viewingHistoryRef.current = true;
+                                  setRevealed(savedState.revealed || false);
+                                  setResults(savedState.results || null);
+                                  setFinalPoint(savedState.finalPoint || null);
+                                  setUserVotes(savedState.userVotes || {});
+                                  // Sync participants: reset then push historical results to them
+                                  socket.emit("reset", { roomId });
+                                  socket.emit("restore-story-state", {
+                                    roomId,
+                                    results: savedState.results,
+                                    revealed: savedState.revealed,
+                                    finalPoint: savedState.finalPoint
+                                  });
+                                } else {
+                                  viewingHistoryRef.current = false;
+                                  setRevealed(false);
+                                  setResults(null);
+                                  setFinalPoint(null);
+                                  socket.emit("reset", { roomId });
+                                }
                               }
                             }}
                             disabled={currentStoryIndex >= storyList.length - 1}

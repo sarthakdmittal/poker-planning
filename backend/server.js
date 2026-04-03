@@ -266,6 +266,30 @@ io.on("connection", (socket) => {
         currentStoryIndex: rooms[roomId].currentStoryIndex || 0
       });
 
+      // Restore current vote state for the rejoining user
+      socket.emit("voteUpdate", {
+        votes: rooms[roomId].votes,
+        users: rooms[roomId].users
+      });
+
+      // If voting has already been revealed, restore that state
+      if (rooms[roomId].revealed) {
+        socket.emit("reveal", {
+          votes: rooms[roomId].votes,
+          users: rooms[roomId].users
+        });
+      }
+
+      // If a final point was already set, restore it
+      if (rooms[roomId].finalPoint !== null && rooms[roomId].finalPoint !== undefined) {
+        const storyData = rooms[roomId].currentStoryData || {};
+        socket.emit("final", {
+          point: rooms[roomId].finalPoint,
+          issueTitle: storyData.issueTitle || null,
+          acceptanceCriteria: storyData.acceptanceCriteria || null
+        });
+      }
+
       // Broadcast to all in room
       io.to(roomId).emit("users", rooms[roomId].users);
       io.to(roomId).emit("admin", rooms[roomId].admin);
@@ -651,6 +675,42 @@ io.on("connection", (socket) => {
     }
   });
 
+  // Admin navigated to a historical story — broadcast its saved results to all participants
+  socket.on("restore-story-state", ({ roomId, results, revealed, finalPoint }) => {
+    if (!rooms[roomId]) return;
+
+    // Update backend state with the historical data
+    if (results && results.votes) {
+      rooms[roomId].votes = results.votes;
+    }
+    rooms[roomId].revealed = revealed || false;
+    rooms[roomId].finalPoint = finalPoint !== undefined ? finalPoint : null;
+
+    // Broadcast to ALL participants (admin's viewingHistoryRef guard will absorb the echo)
+    // First send voteUpdate so participants know who voted, then reveal to show results
+    if (results && results.votes) {
+      io.to(roomId).emit("voteUpdate", {
+        votes: results.votes,
+        users: rooms[roomId].users
+      });
+    }
+    if (revealed && results) {
+      io.to(roomId).emit("reveal", {
+        votes: results.votes || {},
+        users: rooms[roomId].users
+      });
+    }
+    if (finalPoint !== null && finalPoint !== undefined) {
+      io.to(roomId).emit("final", {
+        point: finalPoint,
+        issueTitle: null,
+        acceptanceCriteria: null
+      });
+    }
+
+    console.log(`Restored story state in room ${roomId}: revealed=${revealed}, finalPoint=${finalPoint}`);
+  });
+
   // Sync room state for reconnecting users
   socket.on("sync-room-state", ({ roomId, revealed, results }) => {
     if (!rooms[roomId]) return;
@@ -676,13 +736,27 @@ io.on("connection", (socket) => {
 
     const room = rooms[roomId];
 
+    // Always send current vote state (who has voted, even if not revealed)
+    socket.emit("voteUpdate", {
+      votes: room.votes,
+      users: room.users
+    });
+
     if (room.revealed && room.votes) {
-      // Send the current revealed state to the client
       socket.emit("reveal", {
         votes: room.votes,
         users: room.users
       });
       console.log(`Sent revealed state to rejoining user in room ${roomId}`);
+    }
+
+    if (room.finalPoint !== null && room.finalPoint !== undefined) {
+      const storyData = room.currentStoryData || {};
+      socket.emit("final", {
+        point: room.finalPoint,
+        issueTitle: storyData.issueTitle || null,
+        acceptanceCriteria: storyData.acceptanceCriteria || null
+      });
     }
   });
 });
