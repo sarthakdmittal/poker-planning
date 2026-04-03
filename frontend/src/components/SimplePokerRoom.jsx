@@ -243,7 +243,11 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
       socket.emit("getUsers", { roomId });
       socket.emit("requestObservers", { roomId });
       socket.emit("getRoomInfo", { roomId });
-      socket.emit("join-room", { userName: name, roomId });
+      socket.emit("join-room", {
+        userName: name,
+        roomId,
+        adminSecret: localStorage.getItem(`adminSecret_${roomId}`) || undefined
+      });
     }
   }, [roomId, name, hasRestoredState]);
 
@@ -307,6 +311,9 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
 
     socket.on("currentAdmin", (data) => {
       setAdminName(data.adminName);
+      if (roomId && data.adminName) {
+        localStorage.setItem(`simpleAdmin_${roomId}`, data.adminName);
+      }
     });
 
     socket.on("roomInfo", (data) => {
@@ -364,6 +371,9 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
     socket.on("admin", (data) => {
       const adminValue = typeof data === 'object' ? data.adminName : data;
       setAdminName(adminValue);
+      if (roomId && adminValue) {
+        localStorage.setItem(`simpleAdmin_${roomId}`, adminValue);
+      }
     });
 
     socket.on("voteUpdate", (data) => {
@@ -960,7 +970,8 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
         )}
 
         {/* Waiting for Story Message - Show to non-admins when no story exists */}
-        {!isLoading && !isAdmin && stories.length === 0 && (
+        {/* adminName guard prevents flashing "waiting" before admin status is confirmed */}
+        {!isLoading && adminName && !isAdmin && stories.length === 0 && (
           <div className="waiting-for-story">
             <div className="waiting-icon">📝</div>
             <h3>Waiting for the admin to create a story</h3>

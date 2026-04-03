@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { socket } from "../socket";
-import { FaCopy, FaRegCopy, FaSave, FaTrash, FaEye, FaEyeSlash } from "react-icons/fa";
+import { FaCopy, FaRegCopy, FaSave, FaTrash, FaEye, FaEyeSlash, FaLock } from "react-icons/fa";
+import { encryptCredentials, decryptCredentials } from '../utils/cryptoUtils';
 
 // Define ESTIMATION_SCALES
 const ESTIMATION_SCALES = {
@@ -55,20 +56,25 @@ export default function CreateRoom({ setName }) {
   const [jiraToken, setJiraToken] = useState('');
   const [showJiraToken, setShowJiraToken] = useState(false);
 
-  // Save credentials state
-  const [showSavedCredentialsPrompt, setShowSavedCredentialsPrompt] = useState(false);
-  const [savedCredentialsEmail, setSavedCredentialsEmail] = useState('');
+  // Saved / PIN state
+  const [hasEncryptedCreds, setHasEncryptedCreds] = useState(false);
+  const [hasLegacyCreds, setHasLegacyCreds] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
 
-  // Load saved credentials on mount
-  useEffect(() => {
-    const savedEmail = localStorage.getItem('jiraEmail');
-    const savedToken = localStorage.getItem('jiraToken');
+  // PIN modal: mode is null | 'save' | 'load' | 'migrate'
+  const [pinModal, setPinModal] = useState(null);
+  const [pinValue, setPinValue] = useState('');
+  const [pinConfirm, setPinConfirm] = useState('');
+  const [pinError, setPinError] = useState('');
+  const [pinLoading, setPinLoading] = useState(false);
 
-    if (savedEmail && savedToken) {
-      setSavedCredentialsEmail(savedEmail);
-      setShowSavedCredentialsPrompt(true);
-    }
+  // Detect stored credentials on mount
+  useEffect(() => {
+    setHasEncryptedCreds(!!localStorage.getItem('jiraCredentials'));
+    // Legacy plain-text keys (pre-encryption)
+    setHasLegacyCreds(
+      !!localStorage.getItem('jiraEmail') && !!localStorage.getItem('jiraToken')
+    );
   }, []);
 
   useEffect(() => {
@@ -122,43 +128,108 @@ export default function CreateRoom({ setName }) {
     };
   }, [navigate, userNameState]);
 
-  // Function to load saved credentials
-  const loadSavedCredentials = () => {
-    const savedEmail = localStorage.getItem('jiraEmail');
-    const savedToken = localStorage.getItem('jiraToken');
-
-    if (savedEmail && savedToken) {
-      setJiraEmail(savedEmail);
-      setJiraToken(savedToken);
-      setEnableJira(true);
-      setShowSavedCredentialsPrompt(false);
-      setMessage({ type: 'success', text: '✓ Credentials loaded successfully!' });
-      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
-    }
-  };
-
-  // Function to delete saved credentials
-  const deleteSavedCredentials = () => {
-    localStorage.removeItem('jiraEmail');
-    localStorage.removeItem('jiraToken');
-    setSavedCredentialsEmail('');
-    setShowSavedCredentialsPrompt(false);
-    setMessage({ type: 'success', text: '✓ Credentials deleted successfully!' });
+  const showMessage = (type, text) => {
+    setMessage({ type, text });
     setTimeout(() => setMessage({ type: '', text: '' }), 3000);
   };
 
-  // Function to save credentials manually
-  const handleSaveCredentials = () => {
-    if (jiraEmail.trim() && jiraToken.trim()) {
-      localStorage.setItem('jiraEmail', jiraEmail.trim());
-      localStorage.setItem('jiraToken', jiraToken.trim());
-      setSavedCredentialsEmail(jiraEmail.trim());
-      setMessage({ type: 'success', text: '✓ Credentials saved successfully!' });
-      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
-    } else {
-      setMessage({ type: 'error', text: 'Please enter both email and token to save' });
-      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+  const openPinModal = (mode) => {
+    setPinValue('');
+    setPinConfirm('');
+    setPinError('');
+    setPinLoading(false);
+    setPinModal(mode);
+  };
+
+  const closePinModal = () => {
+    setPinModal(null);
+    setPinValue('');
+    setPinConfirm('');
+    setPinError('');
+  };
+
+  const handlePinConfirm = async () => {
+    if (!pinValue.trim()) {
+      setPinError('Please enter a PIN.');
+      return;
     }
+
+    if ((pinModal === 'save' || pinModal === 'migrate') && pinValue !== pinConfirm) {
+      setPinError('PINs do not match.');
+      return;
+    }
+
+    setPinLoading(true);
+    setPinError('');
+
+    try {
+      if (pinModal === 'save') {
+        if (!jiraEmail.trim() || !jiraToken.trim()) {
+          setPinError('Please enter email and token first.');
+          setPinLoading(false);
+          return;
+        }
+        const encrypted = await encryptCredentials(
+          { email: jiraEmail.trim(), token: jiraToken.trim() },
+          pinValue
+        );
+        localStorage.setItem('jiraCredentials', encrypted);
+        // Remove any legacy plain-text keys
+        localStorage.removeItem('jiraEmail');
+        localStorage.removeItem('jiraToken');
+        setHasEncryptedCreds(true);
+        setHasLegacyCreds(false);
+        closePinModal();
+        showMessage('success', '✓ Credentials encrypted and saved.');
+
+      } else if (pinModal === 'load') {
+        const stored = localStorage.getItem('jiraCredentials');
+        const creds = await decryptCredentials(stored, pinValue);
+        setJiraEmail(creds.email);
+        setJiraToken(creds.token);
+        setEnableJira(true);
+        closePinModal();
+        showMessage('success', '✓ Credentials loaded.');
+
+      } else if (pinModal === 'migrate') {
+        // Encrypt the legacy plain-text creds with the new PIN
+        const email = localStorage.getItem('jiraEmail');
+        const token = localStorage.getItem('jiraToken');
+        const encrypted = await encryptCredentials({ email, token }, pinValue);
+        localStorage.setItem('jiraCredentials', encrypted);
+        localStorage.removeItem('jiraEmail');
+        localStorage.removeItem('jiraToken');
+        setHasEncryptedCreds(true);
+        setHasLegacyCreds(false);
+        closePinModal();
+        showMessage('success', '✓ Credentials secured with PIN.');
+      }
+    } catch {
+      // AES-GCM throws on wrong PIN
+      if (pinModal === 'load') {
+        setPinError('Incorrect PIN. Please try again.');
+      } else {
+        setPinError('Encryption failed. Please try again.');
+      }
+      setPinLoading(false);
+    }
+  };
+
+  const handleDeleteCredentials = () => {
+    localStorage.removeItem('jiraCredentials');
+    localStorage.removeItem('jiraEmail');
+    localStorage.removeItem('jiraToken');
+    setHasEncryptedCreds(false);
+    setHasLegacyCreds(false);
+    showMessage('success', '✓ Saved credentials deleted.');
+  };
+
+  const handleSaveCredentials = () => {
+    if (!jiraEmail.trim() || !jiraToken.trim()) {
+      showMessage('error', 'Please enter both email and token to save.');
+      return;
+    }
+    openPinModal('save');
   };
 
   const createRoom = (e) => {
@@ -294,21 +365,97 @@ export default function CreateRoom({ setName }) {
           </div>
         )}
 
-        {/* Saved Credentials Prompt */}
-        {showSavedCredentialsPrompt && (
+        {/* Legacy plain-text credentials migration notice */}
+        {hasLegacyCreds && (
+          <div className="legacy-credentials-notice">
+            <div className="notice-header">⚠️ Unencrypted credentials detected</div>
+            <div className="notice-body">
+              Your Jira credentials are stored as plain text. Secure them with a PIN or delete them.
+            </div>
+            <div className="legacy-actions">
+              <button className="btn-secure" onClick={() => openPinModal('migrate')}>
+                <FaLock /> Secure with PIN
+              </button>
+              <button className="btn-delete" onClick={handleDeleteCredentials}>
+                <FaTrash /> Delete
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Encrypted credentials found */}
+        {hasEncryptedCreds && !hasLegacyCreds && (
           <div className="saved-credentials-prompt">
             <div className="prompt-content">
-              <div className="prompt-icon">💾</div>
+              <div className="prompt-icon"><FaLock /></div>
               <div className="prompt-text">
-                <strong>Saved credentials found!</strong>
-                <p>You have saved Jira credentials for: <span className="email-highlight">{savedCredentialsEmail}</span></p>
+                <strong>Encrypted credentials found</strong>
+                <p>Enter your PIN to load them.</p>
               </div>
               <div className="prompt-actions">
-                <button className="btn-load" onClick={loadSavedCredentials}>
+                <button className="btn-load" onClick={() => openPinModal('load')}>
                   Load & Enable
                 </button>
-                <button className="btn-delete" onClick={deleteSavedCredentials}>
+                <button className="btn-delete" onClick={handleDeleteCredentials}>
                   <FaTrash /> Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* PIN Modal */}
+        {pinModal && (
+          <div className="pin-modal-overlay" onClick={(e) => e.target === e.currentTarget && closePinModal()}>
+            <div className="pin-modal">
+              <div className="pin-modal-header">
+                <div className="pin-modal-icon-wrap">
+                  {pinModal === 'load' ? <FaLock /> : <FaLock />}
+                </div>
+                <h2 className="pin-modal-title">
+                  {pinModal === 'load' ? 'Enter PIN' : 'Create PIN'}
+                </h2>
+                <p className="pin-modal-subtitle">
+                  {pinModal === 'load'
+                    ? 'Enter your PIN to decrypt and load your saved Jira credentials.'
+                    : 'Choose a PIN to encrypt your Jira credentials. You\'ll need it each time you load them.'
+                  }
+                </p>
+              </div>
+
+              {pinError && <div className="pin-modal-error">⚠️ {pinError}</div>}
+
+              <div className="pin-modal-field">
+                <label>PIN</label>
+                <input
+                  type="password"
+                  placeholder="Enter PIN"
+                  value={pinValue}
+                  onChange={(e) => setPinValue(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && !pinLoading && handlePinConfirm()}
+                  autoFocus
+                />
+              </div>
+
+              {(pinModal === 'save' || pinModal === 'migrate') && (
+                <div className="pin-modal-field">
+                  <label>Confirm PIN</label>
+                  <input
+                    type="password"
+                    placeholder="Confirm PIN"
+                    value={pinConfirm}
+                    onChange={(e) => setPinConfirm(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && !pinLoading && handlePinConfirm()}
+                  />
+                </div>
+              )}
+
+              <div className="pin-modal-actions">
+                <button className="pin-modal-cancel" onClick={closePinModal} disabled={pinLoading}>
+                  Cancel
+                </button>
+                <button className="pin-modal-confirm" onClick={handlePinConfirm} disabled={pinLoading}>
+                  {pinLoading ? 'Processing…' : pinModal === 'load' ? 'Unlock' : 'Encrypt & Save'}
                 </button>
               </div>
             </div>
@@ -435,7 +582,7 @@ export default function CreateRoom({ setName }) {
                   onClick={handleSaveCredentials}
                   disabled={!jiraEmail.trim() || !jiraToken.trim()}
                 >
-                  <FaSave /> Save Credentials
+                  <FaLock /> Encrypt & Save Credentials
                 </button>
               </div>
             )}
