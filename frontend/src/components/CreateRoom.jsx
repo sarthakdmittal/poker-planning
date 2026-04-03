@@ -95,8 +95,12 @@ export default function CreateRoom({ setName }) {
       setError('Cannot connect to server. Please check if backend is running.');
     };
 
-    const handleRoomCreated = ({ roomId }) => {
+    const handleRoomCreated = ({ roomId, adminSecret }) => {
       console.log('Room created successfully:', roomId);
+      // Persist the admin secret so this device can always rejoin as admin
+      if (adminSecret) {
+        localStorage.setItem(`adminSecret_${roomId}`, adminSecret);
+      }
       setIsLoading(false);
       navigate(`/room/${roomId}`, {
         state: { userName: userNameState }

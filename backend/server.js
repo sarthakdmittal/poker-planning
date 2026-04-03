@@ -12,6 +12,8 @@ const {
   getJiraTransitions
 } = require("./jira-api");
 
+const crypto = require("crypto");
+
 const app = express();
 app.use(cors({
   origin: [
@@ -120,6 +122,9 @@ io.on("connection", (socket) => {
       }
     }
 
+    // Generate a secret token that only the real admin will have
+    const adminSecret = crypto.randomBytes(16).toString("hex");
+
     // Create room
     rooms[roomId] = {
       name: roomName,
@@ -128,6 +133,7 @@ io.on("connection", (socket) => {
       revealed: false,
       finalPoint: null,
       admin: userName,
+      adminSecret,
       observers: {},
       createdBy: socket.id,
       createdAt: new Date().toISOString(),
@@ -155,8 +161,8 @@ io.on("connection", (socket) => {
 
     socket.join(roomId);
 
-    // Send confirmation
-    socket.emit("room-created", { roomId, roomName });
+    // Send confirmation — include adminSecret so creator can store it locally
+    socket.emit("room-created", { roomId, roomName, adminSecret });
 
     // Broadcast room data
     io.to(roomId).emit("users", rooms[roomId].users);
@@ -204,11 +210,21 @@ io.on("connection", (socket) => {
   });
 
   // Handle join room
-  socket.on("join-room", ({ userName, roomId }) => {
+  socket.on("join-room", ({ userName, roomId, adminSecret }) => {
     roomId = roomId.toUpperCase();
     console.log(`Join-room attempt: ${userName} trying to join ${roomId}`);
 
     if (rooms[roomId]) {
+      // Block impersonation: if the name matches the admin's reserved name,
+      // require the correct adminSecret — but only if the room was created with one
+      if (userName === rooms[roomId].admin && rooms[roomId].adminSecret) {
+        if (!adminSecret || adminSecret !== rooms[roomId].adminSecret) {
+          console.log(`Blocked impersonation attempt for admin "${userName}" in room ${roomId}`);
+          socket.emit("error", { message: `The name "${userName}" is reserved for the room admin. Please use a different name.` });
+          return;
+        }
+      }
+
       // Check if user already exists
       const existingUserId = Object.keys(rooms[roomId].users).find(
         id => rooms[roomId].users[id] === userName
@@ -233,9 +249,15 @@ io.on("connection", (socket) => {
           rooms[roomId].adminDisconnected = false;
         }
       } else if (!existingUserId) {
-        // New user
+        // New user (or admin who fully disconnected and lost their slot)
         rooms[roomId].users[socket.id] = userName;
         rooms[roomId].observers[socket.id] = false;
+
+        // Restore admin status if the admin is rejoining after a full disconnect
+        if (userName === rooms[roomId].admin) {
+          rooms[roomId].adminSocketId = socket.id;
+          rooms[roomId].adminDisconnected = false;
+        }
       }
 
       socket.join(roomId);

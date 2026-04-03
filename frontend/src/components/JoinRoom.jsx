@@ -1,5 +1,5 @@
 // components/JoinRoom.jsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { socket } from "../socket";
 
@@ -8,9 +8,19 @@ export default function JoinRoom({ setName }) {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  useEffect(() => {
+    const handleError = ({ message }) => {
+      setError(message);
+      setIsLoading(false);
+    };
+    socket.on('error', handleError);
+    return () => socket.off('error', handleError);
+  }, []);
+
   const joinRoom = (e) => {
     e.preventDefault();
     setIsLoading(true);
+    setError('');
 
     const userName = e.target.userName.value.trim();
     const roomId = e.target.roomId.value.trim().toUpperCase();
@@ -21,16 +31,28 @@ export default function JoinRoom({ setName }) {
       return;
     }
 
-    // Emit join room event
+    // Emit join room event — include adminSecret if this device created the room
     socket.emit('join-room', {
       userName,
-      roomId
+      roomId,
+      adminSecret: localStorage.getItem(`adminSecret_${roomId}`) || undefined
     });
 
-    setName(userName);
-
-    // Navigate to the room
-    navigate(`/room/${roomId}`);
+    // Listen for room-joined confirmation before navigating
+    const handleJoined = () => {
+      socket.off('room-joined', handleJoined);
+      socket.off('error', handleJoinError);
+      setName(userName);
+      navigate(`/room/${roomId}`);
+    };
+    const handleJoinError = ({ message }) => {
+      socket.off('room-joined', handleJoined);
+      socket.off('error', handleJoinError);
+      setError(message);
+      setIsLoading(false);
+    };
+    socket.once('room-joined', handleJoined);
+    socket.once('error', handleJoinError);
   };
 
   return (

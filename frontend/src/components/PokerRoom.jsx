@@ -512,7 +512,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
   const [scaleType, setScaleType] = useState('FIBONACCI');
   const [jiraConnected, setJiraConnected] = useState(false); // Add Jira connection status
   const [hasRestoredState, setHasRestoredState] = useState(false);
-  const [skipNextVoteUpdate, setSkipNextVoteUpdate] = useState(false);
+  const skipNextVoteUpdateRef = useRef(false);
   const [storyVoteHistory, setStoryVoteHistory] = useState({});
 
   // Refs for editors
@@ -602,6 +602,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
         setAllStoryDetails(parsed.allStoryDetails || {});
         setCards(parsed.cards || [0, 1, 2, 3, 5, 8, 13, 21]);
         setScaleType(parsed.scaleType || 'FIBONACCI');
+        setStoryVoteHistory(parsed.storyVoteHistory || {});
 
         // Restore voting state
         setRevealed(parsed.revealed || false);
@@ -615,7 +616,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
           console.log("Restoring results from localStorage");
           setResults(parsed.results);
           if (parsed.revealed) {
-            setSkipNextVoteUpdate(true); // Skip the first vote update
+            skipNextVoteUpdateRef.current = true; // Skip the first vote update
           }
         } else if (parsed.revealed && parsed.userVotes && parsed.users) {
           // For backward compatibility
@@ -623,7 +624,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
             votes: parsed.userVotes || {},
             users: parsed.users || {}
           });
-          setSkipNextVoteUpdate(true);
+          skipNextVoteUpdateRef.current = true;
         }
       }
 
@@ -744,6 +745,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
         allStoryDetails,
         cards,
         scaleType,
+        storyVoteHistory,
         savedAt: timestamp  // Add timestamp here
       };
       localStorage.setItem(`storyData_${roomId}`, JSON.stringify(storyData));
@@ -766,7 +768,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
     }
   }, [roomId, jiraKey, issueTitle, acceptanceCriteria, description, issueType,
     storyStatus, storyList, currentStoryIndex, storyListInput, revealed,
-    finalPoint, selectedCard, votedUsers, userVotes, users, observers, results, allStoryDetails, cards, scaleType, isLoading, hasRestoredState]);
+    finalPoint, selectedCard, votedUsers, userVotes, users, observers, results, allStoryDetails, cards, scaleType, storyVoteHistory, isLoading, hasRestoredState]);
 
   // Update this useEffect to handle reconnection better
   useEffect(() => {
@@ -783,7 +785,8 @@ export default function PokerRoom({ name, onLeaveRoom }) {
       // Also try to join if not already in room
       socket.emit("join-room", {
         userName: name,
-        roomId: roomId
+        roomId: roomId,
+        adminSecret: localStorage.getItem(`adminSecret_${roomId}`) || undefined
       });
 
       // If we have a jiraKey from localStorage, fetch fresh details
@@ -864,7 +867,8 @@ export default function PokerRoom({ name, onLeaveRoom }) {
         // Try to re-join if not in room
         socket.emit("join-room", {
           userName: name,
-          roomId: roomId
+          roomId: roomId,
+          adminSecret: localStorage.getItem(`adminSecret_${roomId}`) || undefined
         });
       }
     };
@@ -1062,7 +1066,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
       }
       setResults(data);
       setRevealed(true);
-      setSkipNextVoteUpdate(false);
+      skipNextVoteUpdateRef.current = false;
 
       // Save to localStorage
       if (roomId) {
@@ -1136,7 +1140,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
       setSelectedCard(null);
       setObservers({});
       setObservingTarget(null);
-      setSkipNextVoteUpdate(false); // Reset skip flag on reset
+      skipNextVoteUpdateRef.current = false; // Reset skip flag on reset
       // Save reset state to localStorage
       if (roomId) {
         const storyData = JSON.parse(localStorage.getItem(`storyData_${roomId}`) || '{}');
@@ -1170,9 +1174,9 @@ export default function PokerRoom({ name, onLeaveRoom }) {
         return;
       }
 
-      if (skipNextVoteUpdate) {
+      if (skipNextVoteUpdateRef.current) {
         console.log("Skipping vote update to preserve restored results");
-        setSkipNextVoteUpdate(false);
+        skipNextVoteUpdateRef.current = false;
         return;
       }
 
@@ -1245,6 +1249,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
   useEffect(() => {
     if (jiraKey && roomId && jiraConnected) {
       socket.emit("fetchJiraDetails", { roomId, jiraKey });
+      fetchAvailableTransitions(jiraKey);
     }
   }, [jiraKey, roomId, jiraConnected]);
 
@@ -1304,7 +1309,8 @@ export default function PokerRoom({ name, onLeaveRoom }) {
       // Re-join the room
       socket.emit("join-room", {
         userName: name,
-        roomId: roomId
+        roomId: roomId,
+        adminSecret: localStorage.getItem(`adminSecret_${roomId}`) || undefined
       });
 
       // Request users after joining
