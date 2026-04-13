@@ -102,6 +102,7 @@ const calculateStats = (votes) => {
 export default function SimplePokerRoom({ name, onLeaveRoom }) {
   const { roomId } = useParams();
   const [users, setUsers] = useState({});
+  const [userIcons, setUserIcons] = useState({});
   const [revealed, setRevealed] = useState(false);
   const [results, setResults] = useState(null);
   const [finalPoint, setFinalPoint] = useState(null);
@@ -309,6 +310,10 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
       setUsers(data);
     });
 
+    socket.on("userIcons", (data) => {
+      setUserIcons(data || {});
+    });
+
     socket.on("currentAdmin", (data) => {
       setAdminName(data.adminName);
       if (roomId && data.adminName) {
@@ -391,6 +396,7 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
     return () => {
       socket.off("stories-updated");
       socket.off("users");
+      socket.off("userIcons");
       socket.off("currentAdmin");
       socket.off("roomInfo");
       socket.off("observersUpdate");
@@ -793,8 +799,11 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
                   ${isObserving ? 'observing' : ''}
                   ${isCurrentUser ? 'current-user' : ''}
                 `}>
-                  <div className="participant-avatar" style={{ backgroundColor }}>
-                    {getInitials(userName)}
+                  <div
+                    className={`participant-avatar${userIcons[userId] ? ' has-icon' : ''}`}
+                    style={userIcons[userId] ? {} : { backgroundColor }}
+                  >
+                    {userIcons[userId] ? userIcons[userId] : getInitials(userName)}
                     {isObserver && <FaUserSecret className="observer-icon" />}
                   </div>
                   <span className="participant-name">{userName}</span>
@@ -1077,8 +1086,11 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
               {Object.entries(results.votes).map(([id, vote]) => (
                 <div key={id} className={`vote-item ${observingTarget === id ? 'observed-vote-item' : ''}`}>
                   <div className="voter-info">
-                    <div className="voter-avatar" style={{ backgroundColor: getAvatarColor(results.users[id]) }}>
-                      {getInitials(results.users[id])}
+                    <div
+                      className={`voter-avatar${userIcons[id] ? ' has-icon' : ''}`}
+                      style={userIcons[id] ? {} : { backgroundColor: getAvatarColor(results.users[id]) }}
+                    >
+                      {userIcons[id] ? userIcons[id] : getInitials(results.users[id])}
                       {observers[id] && <FaUserSecret className="voter-observer-icon" />}
                     </div>
                     <span className="voter-name">{results.users[id]}</span>

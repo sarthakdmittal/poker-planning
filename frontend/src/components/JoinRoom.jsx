@@ -3,10 +3,18 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { socket } from "../socket";
 
+const AVATAR_ICONS = [
+  '🦊', '🐺', '🦁', '🐯', '🐻', '🐼', '🐨', '🐸',
+  '🦄', '🐲', '🦅', '🦉', '🦋', '🐙', '🦀', '🐬',
+  '🧙', '🦸', '🧛', '🤖', '👻', '👽', '🥷', '🧝',
+  '🧜', '🧚', '🐱', '🐶', '🐧', '🔥', '🚀', '⚡',
+];
+
 export default function JoinRoom({ setName }) {
   const navigate = useNavigate();
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedIcon, setSelectedIcon] = useState(null);
 
   useEffect(() => {
     const handleError = ({ message }) => {
@@ -35,7 +43,8 @@ export default function JoinRoom({ setName }) {
     socket.emit('join-room', {
       userName,
       roomId,
-      adminSecret: localStorage.getItem(`adminSecret_${roomId}`) || undefined
+      adminSecret: localStorage.getItem(`adminSecret_${roomId}`) || undefined,
+      ...(selectedIcon && { userIcon: selectedIcon })
     });
 
     // Listen for room-joined confirmation before navigating
@@ -92,6 +101,35 @@ export default function JoinRoom({ setName }) {
               maxLength={30}
             />
             <div className="input-hint">This is how others will see you in the room</div>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">
+              <span className="label-icon">🎨</span>
+              Your Icon <span className="optional-badge">Optional</span>
+            </label>
+            <div className="icon-picker-grid">
+              <button
+                type="button"
+                className={`icon-option icon-none ${selectedIcon === null ? 'selected' : ''}`}
+                onClick={() => setSelectedIcon(null)}
+                title="No icon (use initials)"
+              >
+                <span>A</span>
+              </button>
+              {AVATAR_ICONS.map((icon) => (
+                <button
+                  key={icon}
+                  type="button"
+                  className={`icon-option ${selectedIcon === icon ? 'selected' : ''}`}
+                  onClick={() => setSelectedIcon(icon === selectedIcon ? null : icon)}
+                  title={icon}
+                >
+                  {icon}
+                </button>
+              ))}
+            </div>
+            <div className="input-hint">Pick an icon to represent you in the room</div>
           </div>
 
           <div className="form-group">

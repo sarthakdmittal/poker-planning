@@ -4,6 +4,13 @@ import { socket } from "../socket";
 import { FaCopy, FaRegCopy, FaSave, FaTrash, FaEye, FaEyeSlash, FaLock } from "react-icons/fa";
 import { encryptCredentials, decryptCredentials } from '../utils/cryptoUtils';
 
+const AVATAR_ICONS = [
+  '🦊', '🐺', '🦁', '🐯', '🐻', '🐼', '🐨', '🐸',
+  '🦄', '🐲', '🦅', '🦉', '🦋', '🐙', '🦀', '🐬',
+  '🧙', '🦸', '🧛', '🤖', '👻', '👽', '🥷', '🧝',
+  '🧜', '🧚', '🐱', '🐶', '🐧', '🔥', '🚀', '⚡',
+];
+
 // Define ESTIMATION_SCALES
 const ESTIMATION_SCALES = {
   FIBONACCI: {
@@ -43,6 +50,7 @@ export default function CreateRoom({ setName }) {
   const [error, setError] = useState('');
   const [generatedRoomId, setGeneratedRoomId] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedIcon, setSelectedIcon] = useState(null);
   const [roomIdCopied, setRoomIdCopied] = useState(false);
   const [socketConnected, setSocketConnected] = useState(socket.connected);
   const [userNameState, setUserNameState] = useState('');
@@ -296,7 +304,8 @@ export default function CreateRoom({ setName }) {
       estimationScale: {
         type: selectedScale,
         cards: cards
-      }
+      },
+      ...(selectedIcon && { userIcon: selectedIcon })
     };
 
     // Add Jira credentials if enabled
@@ -479,6 +488,35 @@ export default function CreateRoom({ setName }) {
               maxLength={30}
             />
             <div className="input-hint">This is how others will see you</div>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">
+              <span className="label-icon">🎨</span>
+              Your Icon <span className="optional-badge">Optional</span>
+            </label>
+            <div className="icon-picker-grid">
+              <button
+                type="button"
+                className={`icon-option icon-none ${selectedIcon === null ? 'selected' : ''}`}
+                onClick={() => setSelectedIcon(null)}
+                title="No icon (use initials)"
+              >
+                <span>A</span>
+              </button>
+              {AVATAR_ICONS.map((icon) => (
+                <button
+                  key={icon}
+                  type="button"
+                  className={`icon-option ${selectedIcon === icon ? 'selected' : ''}`}
+                  onClick={() => setSelectedIcon(icon === selectedIcon ? null : icon)}
+                  title={icon}
+                >
+                  {icon}
+                </button>
+              ))}
+            </div>
+            <div className="input-hint">Pick an icon to represent you in the room</div>
           </div>
 
           <div className="form-group">

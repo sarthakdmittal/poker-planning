@@ -2065,3 +2065,75 @@
   height: 28px;
   color: #1976d2;
 }
+
+/* ── Avatar icon picker ── */
+.optional-badge {
+  font-size: 11px;
+  font-weight: 500;
+  color: #888;
+  background: #f0f0f0;
+  border-radius: 20px;
+  padding: 2px 8px;
+  margin-left: 6px;
+  letter-spacing: 0.2px;
+}
+
+.icon-picker-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 16px;
+  border: 2px solid #e9ecef;
+}
+
+.icon-option {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  background: #fff;
+  font-size: 22px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  padding: 0;
+  line-height: 1;
+}
+
+.icon-option:hover {
+  transform: scale(1.15);
+  border-color: #667eea;
+  box-shadow: 0 3px 8px rgba(102,126,234,0.25);
+}
+
+.icon-option.selected {
+  border-color: #667eea;
+  background: linear-gradient(135deg, #f0f2ff 0%, #e8ecff 100%);
+  box-shadow: 0 0 0 3px rgba(102,126,234,0.2);
+  transform: scale(1.1);
+}
+
+.icon-none {
+  font-size: 14px;
+  font-weight: 700;
+  color: #aaa;
+  background: #f0f0f0;
+}
+
+.icon-none.selected {
+  color: #667eea;
+  background: linear-gradient(135deg, #f0f2ff 0%, #e8ecff 100%);
+}
+
+/* ── Participant avatar with emoji icon ── */
+.participant-avatar.has-icon,
+.voter-avatar.has-icon {
+  background: #f0f2ff !important;
+  font-size: 20px;
+  line-height: 1;
+}

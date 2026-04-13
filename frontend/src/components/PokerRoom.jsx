@@ -468,6 +468,7 @@ const calculateStats = (votes) => {
 export default function PokerRoom({ name, onLeaveRoom }) {
   const { roomId } = useParams(); // Get roomId from URL
   const [users, setUsers] = useState({});
+  const [userIcons, setUserIcons] = useState({});
   const [revealed, setRevealed] = useState(false);
   const [results, setResults] = useState(null);
   const [finalPoint, setFinalPoint] = useState(null);
@@ -944,6 +945,10 @@ export default function PokerRoom({ name, onLeaveRoom }) {
       }
     });
 
+    socket.on("userIcons", (data) => {
+      setUserIcons(data || {});
+    });
+
     // ADD THIS NEW LISTENER FOR CURRENT ADMIN
     socket.on("currentAdmin", (data) => {
       console.log("Received current admin:", data);
@@ -1217,6 +1222,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
     return () => {
       console.log("Cleaning up socket listeners");
       socket.off("users");
+      socket.off("userIcons");
       socket.off("reveal");
       socket.off("final");
       socket.off("jiraDetails");
@@ -1884,10 +1890,13 @@ export default function PokerRoom({ name, onLeaveRoom }) {
                     ${isCurrentUser ? 'current-user' : ''}
                   `}
                     >
-                      <div className="participant-avatar" style={{ backgroundColor }}>
-                        {getInitials(userName)}
-                        {isObserver && <FaUserSecret className="observer-icon" />}
-                      </div>
+                      <div
+                          className={`participant-avatar${userIcons[userId] ? ' has-icon' : ''}`}
+                          style={userIcons[userId] ? {} : { backgroundColor }}
+                        >
+                          {userIcons[userId] ? userIcons[userId] : getInitials(userName)}
+                          {isObserver && <FaUserSecret className="observer-icon" />}
+                        </div>
                       <span className="participant-name">{userName}</span>
                       {userName === adminName && (
                           <span className="admin-crown" title="Room Admin">👑</span>
@@ -2624,10 +2633,13 @@ export default function PokerRoom({ name, onLeaveRoom }) {
                             className={`vote-item ${isObservedUser ? 'observed-vote-item' : ''}`}
                         >
                           <div className="voter-info">
-                            <div className="voter-avatar" style={{ backgroundColor: getAvatarColor(results.users[id]) }}>
-                              {getInitials(results.users[id])}
-                              {observers[id] && <FaUserSecret className="voter-observer-icon" />}
-                            </div>
+                            <div
+                                className={`voter-avatar${userIcons[id] ? ' has-icon' : ''}`}
+                                style={userIcons[id] ? {} : { backgroundColor: getAvatarColor(results.users[id]) }}
+                              >
+                                {userIcons[id] ? userIcons[id] : getInitials(results.users[id])}
+                                {observers[id] && <FaUserSecret className="voter-observer-icon" />}
+                              </div>
                             <span className="voter-name">{results.users[id]}</span>
                           </div>
                           <span className="vote-value">{vote}</span>

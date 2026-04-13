@@ -69,6 +69,7 @@ io.on("connection", (socket) => {
         delete rooms[roomId].users[socket.id];
         delete rooms[roomId].votes[socket.id];
         delete rooms[roomId].observers[socket.id];
+        if (rooms[roomId].userIcons) delete rooms[roomId].userIcons[socket.id];
 
         // If admin left, mark disconnection
         if (wasAdmin) {
@@ -78,6 +79,7 @@ io.on("connection", (socket) => {
 
         // Emit updates
         io.to(roomId).emit("users", rooms[roomId].users);
+        io.to(roomId).emit("userIcons", rooms[roomId].userIcons || {});
         io.to(roomId).emit("admin", rooms[roomId].admin);
         io.to(roomId).emit("observersUpdate", rooms[roomId].observers);
         io.to(roomId).emit("roomInfo", {
@@ -104,7 +106,7 @@ io.on("connection", (socket) => {
   });
 
   // Handle room creation with Jira credentials
-  socket.on("create-room", ({ userName, roomName, roomId, estimationScale, jiraEmail, jiraToken }) => {
+  socket.on("create-room", ({ userName, roomName, roomId, estimationScale, jiraEmail, jiraToken, userIcon }) => {
     console.log("===== CREATE ROOM =====");
     console.log("Jira credentials provided:", !!jiraEmail && !!jiraToken);
 
@@ -147,7 +149,8 @@ io.on("connection", (socket) => {
       jiraConnected: jiraConnected,
       // Add stories array for simple mode
       stories: [],
-      currentStoryIndex: 0
+      currentStoryIndex: 0,
+      userIcons: {}
     };
 
     // Store Jira client if created
@@ -158,6 +161,7 @@ io.on("connection", (socket) => {
     // Add creator to room
     rooms[roomId].users[socket.id] = userName;
     rooms[roomId].observers[socket.id] = false;
+    rooms[roomId].userIcons[socket.id] = userIcon || null;
 
     socket.join(roomId);
 
@@ -166,6 +170,7 @@ io.on("connection", (socket) => {
 
     // Broadcast room data
     io.to(roomId).emit("users", rooms[roomId].users);
+    io.to(roomId).emit("userIcons", rooms[roomId].userIcons);
     io.to(roomId).emit("admin", rooms[roomId].admin);
     io.to(roomId).emit("observersUpdate", rooms[roomId].observers);
     io.to(roomId).emit("roomInfo", {
@@ -210,7 +215,7 @@ io.on("connection", (socket) => {
   });
 
   // Handle join room
-  socket.on("join-room", ({ userName, roomId, adminSecret }) => {
+  socket.on("join-room", ({ userName, roomId, adminSecret, userIcon }) => {
     roomId = roomId.toUpperCase();
     console.log(`Join-room attempt: ${userName} trying to join ${roomId}`);
 
@@ -234,14 +239,18 @@ io.on("connection", (socket) => {
         // Reconnecting user
         const oldVote = rooms[roomId].votes[existingUserId];
         const oldObserverStatus = rooms[roomId].observers[existingUserId];
+        const oldIcon = rooms[roomId].userIcons ? rooms[roomId].userIcons[existingUserId] : null;
 
         delete rooms[roomId].users[existingUserId];
         delete rooms[roomId].votes[existingUserId];
         delete rooms[roomId].observers[existingUserId];
+        if (rooms[roomId].userIcons) delete rooms[roomId].userIcons[existingUserId];
 
         rooms[roomId].users[socket.id] = userName;
         if (oldVote !== undefined) rooms[roomId].votes[socket.id] = oldVote;
         rooms[roomId].observers[socket.id] = oldObserverStatus || false;
+        if (!rooms[roomId].userIcons) rooms[roomId].userIcons = {};
+        rooms[roomId].userIcons[socket.id] = userIcon || oldIcon || null;
 
         // If this was the admin reconnecting
         if (userName === rooms[roomId].admin) {
@@ -252,6 +261,8 @@ io.on("connection", (socket) => {
         // New user (or admin who fully disconnected and lost their slot)
         rooms[roomId].users[socket.id] = userName;
         rooms[roomId].observers[socket.id] = false;
+        if (!rooms[roomId].userIcons) rooms[roomId].userIcons = {};
+        rooms[roomId].userIcons[socket.id] = userIcon || null;
 
         // Restore admin status if the admin is rejoining after a full disconnect
         if (userName === rooms[roomId].admin) {
@@ -270,6 +281,7 @@ io.on("connection", (socket) => {
       });
 
       socket.emit("users", rooms[roomId].users);
+      socket.emit("userIcons", rooms[roomId].userIcons || {});
       socket.emit("admin", rooms[roomId].admin);
       socket.emit("observersUpdate", rooms[roomId].observers);
       socket.emit("roomInfo", {
@@ -314,6 +326,7 @@ io.on("connection", (socket) => {
 
       // Broadcast to all in room
       io.to(roomId).emit("users", rooms[roomId].users);
+      io.to(roomId).emit("userIcons", rooms[roomId].userIcons || {});
       io.to(roomId).emit("admin", rooms[roomId].admin);
       io.to(roomId).emit("observersUpdate", rooms[roomId].observers);
       io.to(roomId).emit("roomInfo", {
@@ -645,6 +658,7 @@ io.on("connection", (socket) => {
   socket.on("getUsers", ({ roomId }) => {
     if (rooms[roomId]) {
       socket.emit("users", rooms[roomId].users);
+      socket.emit("userIcons", rooms[roomId].userIcons || {});
       socket.emit("roomInfo", {
         roomId: roomId,
         roomName: rooms[roomId].name,
