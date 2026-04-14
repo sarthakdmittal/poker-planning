@@ -2669,6 +2669,17 @@
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
 }
 
+.story-queue-card.non-admin {
+  cursor: default;
+}
+
+.story-queue-card.non-admin:hover {
+  transform: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  border-color: #e8e8e8;
+  cursor: default;
+}
+
 .story-queue-card.current-story {
   border-left: 4px solid #4a90e2;
   background-color: #f0f7ff;
@@ -2679,8 +2690,7 @@
 }
 
 .story-queue-card.finalized {
-  border-left: 4px solid #ff9800;
-  opacity: 0.8;
+  border-left: 4px solid #4caf50;
 }
 
 .story-queue-card .story-number {

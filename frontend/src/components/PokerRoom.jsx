@@ -1246,6 +1246,31 @@ export default function PokerRoom({ name, onLeaveRoom }) {
   const currentUserId = Object.keys(users).find(uid => users[uid] === name);
   const isCurrentUserObserver = currentUserId ? observers[currentUserId] : false;
 
+  // Sync admin's story list to backend whenever it changes
+  useEffect(() => {
+    if (isAdmin && roomId && hasRestoredState) {
+      socket.emit("update-stories", {
+        roomId,
+        stories: storyList,
+        currentStoryIndex
+      });
+    }
+  }, [storyList, currentStoryIndex, isAdmin, roomId, hasRestoredState]);
+
+  // Receive story list updates for non-admin participants
+  useEffect(() => {
+    const handleStoriesUpdated = ({ stories, currentStoryIndex: newIndex }) => {
+      if (!isAdmin && Array.isArray(stories)) {
+        setStoryList(stories);
+        if (typeof newIndex === 'number') {
+          setCurrentStoryIndex(newIndex);
+        }
+      }
+    };
+    socket.on("stories-updated", handleStoriesUpdated);
+    return () => socket.off("stories-updated", handleStoriesUpdated);
+  }, [isAdmin]);
+
   useEffect(() => {
     if (storyList.length > 0 && currentStoryIndex < storyList.length) {
       setJiraKey(storyList[currentStoryIndex]);
@@ -1652,7 +1677,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
                     summary: details.summary || (isCurrent ? (issueTitle || `Loading ${key}...`) : `Loading ${key}...`),
                     type: details.type || (isCurrent ? issueType : null),
                     status: details.status || (isCurrent ? storyStatus : "To Do"),
-                    point: isCurrent && finalPoint ? finalPoint : null
+                    point: isCurrent && finalPoint ? finalPoint : (storyVoteHistory[key]?.finalPoint || null)
                   };
                 })}
                 currentStoryIndex={currentStoryIndex}

@@ -82,9 +82,14 @@ async function testJiraConnection(jiraClient) {
 async function updateJiraStoryPoints(jiraClient, issueKey, storyPoints) {
   if (!jiraClient) throw new Error("Jira client not initialized");
 
+  const storyPointField = process.env.JIRA_STORYPOINT_FIELD;
+  if (!storyPointField) {
+    throw new Error("JIRA_STORYPOINT_FIELD is not configured in .env");
+  }
+
   const payload = {
     fields: {
-      [process.env.JIRA_STORYPOINT_FIELD]: storyPoints
+      [storyPointField]: storyPoints
     }
   };
 

@@ -185,8 +185,7 @@ const StoryQueue = ({
 
   const getStoryStatus = (story, index) => {
     if (index === currentStoryIndex) return 'current';
-    if (finalPoint && story.key === stories[currentStoryIndex]?.key) return 'finalized';
-    if (votes && story.key === stories[currentStoryIndex]?.key && revealed) return 'voted';
+    if (story.point) return 'finalized';
     return '';
   };
 
@@ -270,13 +269,13 @@ const StoryQueue = ({
               return (
                 <div
                   key={`${story.key}-${index}`}
-                  className={`story-queue-card ${status} ${isDragged ? 'dragging' : ''} ${isDragOver ? 'drag-over' : ''}`}
+                  className={`story-queue-card ${status} ${isDragged ? 'dragging' : ''} ${isDragOver ? 'drag-over' : ''} ${!isAdmin ? 'non-admin' : ''}`}
                   draggable={isAdmin}
                   onDragStart={(e) => handleDragStart(e, index)}
                   onDragOver={(e) => handleDragOver(e, index)}
                   onDragEnd={handleDragEnd}
                   onDrop={(e) => handleDrop(e, index)}
-                  onClick={() => onSelectStory(index)}
+                  onClick={() => { if (isAdmin) onSelectStory(index); }}
                 >
                   <div className="story-number">
                     <span>
@@ -330,9 +329,9 @@ const StoryQueue = ({
           )}
         </div>
 
-        {isAdmin && stories.length > 0 && (
+        {stories.length > 0 && (
           <div className="story-queue-footer">
-            <small>Drag to reorder • Click to load</small>
+            <small>{isAdmin ? 'Drag to reorder • Click to load' : 'View only'}</small>
           </div>
         )}
       </div>
