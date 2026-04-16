@@ -105,6 +105,22 @@ io.on("connection", (socket) => {
     });
   });
 
+  // Handle explicit leave-room so the count updates immediately for remaining participants
+  socket.on("leave-room", ({ roomId }) => {
+    if (!roomId || !rooms[roomId] || !rooms[roomId].users[socket.id]) return;
+
+    delete rooms[roomId].users[socket.id];
+    delete rooms[roomId].votes[socket.id];
+    delete rooms[roomId].observers[socket.id];
+    if (rooms[roomId].userIcons) delete rooms[roomId].userIcons[socket.id];
+
+    socket.leave(roomId);
+
+    io.to(roomId).emit("users", rooms[roomId].users);
+    io.to(roomId).emit("userIcons", rooms[roomId].userIcons || {});
+    io.to(roomId).emit("observersUpdate", rooms[roomId].observers);
+  });
+
   // Handle room creation with Jira credentials
   socket.on("create-room", ({ userName, roomName, roomId, estimationScale, jiraEmail, jiraToken, userIcon }) => {
     console.log("===== CREATE ROOM =====");

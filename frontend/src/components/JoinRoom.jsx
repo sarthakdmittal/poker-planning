@@ -1,20 +1,41 @@
 // components/JoinRoom.jsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { socket } from "../socket";
 
-const AVATAR_ICONS = [
-  '🦊', '🐺', '🦁', '🐯', '🐻', '🐼', '🐨', '🐸',
-  '🦄', '🐲', '🦅', '🦉', '🦋', '🐙', '🦀', '🐬',
-  '🧙', '🦸', '🧛', '🤖', '👻', '👽', '🥷', '🧝',
-  '🧜', '🧚', '🐱', '🐶', '🐧', '🔥', '🚀', '⚡',
-];
+const DICEBEAR_BASE = 'https://api.dicebear.com/9.x';
+const AVATAR_BG = 'backgroundColor=b6e3f4,c0aede,d1d4f9,ffd5dc,ffdfbf&radius=50';
+const AVATAR_SEEDS = {
+  male:   { style: 'adventurer',         seeds: ['Felix', 'Max', 'Oliver', 'Noah', 'Ethan', 'Jack', 'Henry', 'Leo', 'Oscar', 'James', 'Charlie', 'Hugo'] },
+  female: { style: 'adventurer',         seeds: ['Sophie', 'Emma', 'Lily', 'Mia', 'Ava', 'Grace', 'Ruby', 'Clara', 'Zoe', 'Luna', 'Stella', 'Aria'] },
+  other:  { style: 'adventurer-neutral', seeds: ['Alex', 'Riley', 'Jordan', 'Casey', 'Morgan', 'Taylor', 'Avery', 'Quinn', 'Sage', 'Rowan', 'Sky', 'River'] },
+};
+const getAvatarUrl = (style, seed) =>
+  `${DICEBEAR_BASE}/${style}/svg?seed=${encodeURIComponent(seed)}&${AVATAR_BG}`;
+const resizeImage = (file) => new Promise((resolve) => {
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const size = Math.min(img.width, img.height);
+      canvas.width = 100; canvas.height = 100;
+      canvas.getContext('2d').drawImage(img,
+        (img.width - size) / 2, (img.height - size) / 2, size, size, 0, 0, 100, 100);
+      resolve(canvas.toDataURL('image/jpeg', 0.82));
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+});
 
 export default function JoinRoom({ setName }) {
   const navigate = useNavigate();
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [selectedIcon, setSelectedIcon] = useState(null);
+  const [selectedGender, setSelectedGender] = useState(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     const handleError = ({ message }) => {
@@ -64,6 +85,14 @@ export default function JoinRoom({ setName }) {
     socket.once('error', handleJoinError);
   };
 
+  const handleUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const resized = await resizeImage(file);
+    setSelectedIcon(resized);
+    e.target.value = '';
+  };
+
   return (
     <div className="join-room-page">
       <div className="join-room-container">
@@ -106,30 +135,86 @@ export default function JoinRoom({ setName }) {
           <div className="form-group">
             <label className="form-label">
               <span className="label-icon">🎨</span>
-              Your Icon <span className="optional-badge">Optional</span>
+              Your Avatar <span className="optional-badge">Optional</span>
             </label>
-            <div className="icon-picker-grid">
-              <button
-                type="button"
-                className={`icon-option icon-none ${selectedIcon === null ? 'selected' : ''}`}
-                onClick={() => setSelectedIcon(null)}
-                title="No icon (use initials)"
-              >
-                <span>A</span>
-              </button>
-              {AVATAR_ICONS.map((icon) => (
-                <button
-                  key={icon}
-                  type="button"
-                  className={`icon-option ${selectedIcon === icon ? 'selected' : ''}`}
-                  onClick={() => setSelectedIcon(icon === selectedIcon ? null : icon)}
-                  title={icon}
-                >
-                  {icon}
+
+            {/* Upload photo strip */}
+            <div className="avatar-upload-strip">
+              {selectedIcon?.startsWith('data:') ? (
+                <div className="uploaded-avatar-preview">
+                  <img src={selectedIcon} alt="Your photo" className="uploaded-avatar-img" />
+                  <div className="uploaded-avatar-info">
+                    <span>Your photo selected</span>
+                    <button type="button" className="remove-upload-btn" onClick={() => setSelectedIcon(null)}>
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button type="button" className="upload-photo-btn" onClick={() => fileInputRef.current?.click()}>
+                  <span className="upload-photo-icon">📷</span>
+                  <span>Upload a photo</span>
                 </button>
-              ))}
+              )}
+              <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleUpload} />
             </div>
-            <div className="input-hint">Pick an icon to represent you in the room</div>
+
+            {/* Preset avatars (hidden when photo uploaded) */}
+            {!selectedIcon?.startsWith('data:') && (
+              <>
+                <div className="avatar-section-divider"><span>or choose a preset</span></div>
+                <div className="gender-selector">
+                  {[
+                    { key: 'male', label: '♂ Male' },
+                    { key: 'female', label: '♀ Female' },
+                    { key: 'other', label: '⚧ Other' },
+                  ].map(({ key, label }) => (
+                    <button
+                      key={key}
+                      type="button"
+                      className={`gender-btn ${selectedGender === key ? 'selected' : ''}`}
+                      onClick={() => { setSelectedGender(key); setSelectedIcon(null); }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {selectedGender && (
+                  <div className="avatar-picker-grid">
+                    <button
+                      type="button"
+                      className={`avatar-option avatar-none ${selectedIcon === null ? 'selected' : ''}`}
+                      onClick={() => setSelectedIcon(null)}
+                      title="No avatar (use initials)"
+                    >
+                      <span>A</span>
+                    </button>
+                    {AVATAR_SEEDS[selectedGender].seeds.map((seed) => {
+                      const url = getAvatarUrl(AVATAR_SEEDS[selectedGender].style, seed);
+                      return (
+                        <button
+                          key={seed}
+                          type="button"
+                          className={`avatar-option ${selectedIcon === url ? 'selected' : ''}`}
+                          onClick={() => setSelectedIcon(selectedIcon === url ? null : url)}
+                          title={seed}
+                        >
+                          <img src={url} alt={seed} loading="lazy" className="avatar-preset-img" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            )}
+
+            <div className="input-hint">
+              {selectedIcon?.startsWith('data:')
+                ? 'Using your uploaded photo'
+                : selectedGender
+                  ? 'Pick an avatar to represent you'
+                  : 'Upload a photo or choose a preset avatar'}
+            </div>
           </div>
 
           <div className="form-group">

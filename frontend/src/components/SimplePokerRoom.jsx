@@ -68,6 +68,8 @@ const getInitials = (name) => {
     .slice(0, 2);
 };
 
+const isImageUrl = (val) => val && (val.startsWith('http') || val.startsWith('data:'));
+
 // Calculate statistics from votes
 const calculateStats = (votes) => {
   const values = Object.values(votes).filter(v => v !== null && v !== undefined);
@@ -623,6 +625,8 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
   };
 
   const handleLeaveRoom = () => {
+    // Notify server immediately so other participants' counts update right away
+    socket.emit('leave-room', { roomId });
     localStorage.removeItem("pokerUserName");
     if (roomId) {
       localStorage.removeItem(`simpleAdmin_${roomId}`);
@@ -800,10 +804,12 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
                   ${isCurrentUser ? 'current-user' : ''}
                 `}>
                   <div
-                    className={`participant-avatar${userIcons[userId] ? ' has-icon' : ''}`}
+                    className={`participant-avatar${userIcons[userId] ? ' has-icon' : ''}${isImageUrl(userIcons[userId]) ? ' has-img' : ''}`}
                     style={userIcons[userId] ? {} : { backgroundColor }}
                   >
-                    {userIcons[userId] ? userIcons[userId] : getInitials(userName)}
+                    {isImageUrl(userIcons[userId])
+                      ? <img src={userIcons[userId]} alt={userName} className="avatar-img-display" />
+                      : (userIcons[userId] || getInitials(userName))}
                     {isObserver && <FaUserSecret className="observer-icon" />}
                   </div>
                   <span className="participant-name">{userName}</span>
@@ -1087,10 +1093,12 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
                 <div key={id} className={`vote-item ${observingTarget === id ? 'observed-vote-item' : ''}`}>
                   <div className="voter-info">
                     <div
-                      className={`voter-avatar${userIcons[id] ? ' has-icon' : ''}`}
+                      className={`voter-avatar${userIcons[id] ? ' has-icon' : ''}${isImageUrl(userIcons[id]) ? ' has-img' : ''}`}
                       style={userIcons[id] ? {} : { backgroundColor: getAvatarColor(results.users[id]) }}
                     >
-                      {userIcons[id] ? userIcons[id] : getInitials(results.users[id])}
+                      {isImageUrl(userIcons[id])
+                        ? <img src={userIcons[id]} alt={results.users[id]} className="avatar-img-display" />
+                        : (userIcons[id] || getInitials(results.users[id]))}
                       {observers[id] && <FaUserSecret className="voter-observer-icon" />}
                     </div>
                     <span className="voter-name">{results.users[id]}</span>

@@ -70,6 +70,8 @@ const getInitials = (name) => {
       .slice(0, 2);
 };
 
+const isImageUrl = (val) => val && (val.startsWith('http') || val.startsWith('data:'));
+
 // Helper functions for cursor position
 const saveCursorPosition = (el) => {
   const selection = window.getSelection();
@@ -1649,6 +1651,8 @@ export default function PokerRoom({ name, onLeaveRoom }) {
   };
 
   const handleLeaveRoom = () => {
+    // Notify server immediately so other participants' counts update right away
+    socket.emit('leave-room', { roomId });
     // Clear name from localStorage
     localStorage.removeItem("pokerUserName");
     // Clear admin data for this room
@@ -1916,10 +1920,12 @@ export default function PokerRoom({ name, onLeaveRoom }) {
                   `}
                     >
                       <div
-                          className={`participant-avatar${userIcons[userId] ? ' has-icon' : ''}`}
+                          className={`participant-avatar${userIcons[userId] ? ' has-icon' : ''}${isImageUrl(userIcons[userId]) ? ' has-img' : ''}`}
                           style={userIcons[userId] ? {} : { backgroundColor }}
                         >
-                          {userIcons[userId] ? userIcons[userId] : getInitials(userName)}
+                          {isImageUrl(userIcons[userId])
+                            ? <img src={userIcons[userId]} alt={userName} className="avatar-img-display" />
+                            : (userIcons[userId] || getInitials(userName))}
                           {isObserver && <FaUserSecret className="observer-icon" />}
                         </div>
                       <span className="participant-name">{userName}</span>
@@ -2659,10 +2665,12 @@ export default function PokerRoom({ name, onLeaveRoom }) {
                         >
                           <div className="voter-info">
                             <div
-                                className={`voter-avatar${userIcons[id] ? ' has-icon' : ''}`}
+                                className={`voter-avatar${userIcons[id] ? ' has-icon' : ''}${isImageUrl(userIcons[id]) ? ' has-img' : ''}`}
                                 style={userIcons[id] ? {} : { backgroundColor: getAvatarColor(results.users[id]) }}
                               >
-                                {userIcons[id] ? userIcons[id] : getInitials(results.users[id])}
+                                {isImageUrl(userIcons[id])
+                                  ? <img src={userIcons[id]} alt={results.users[id]} className="avatar-img-display" />
+                                  : (userIcons[id] || getInitials(results.users[id]))}
                                 {observers[id] && <FaUserSecret className="voter-observer-icon" />}
                               </div>
                             <span className="voter-name">{results.users[id]}</span>
