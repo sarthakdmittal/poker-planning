@@ -937,7 +937,6 @@ export default function PokerRoom({ name, onLeaveRoom }) {
       if (!currentUserStillInRoom && !isReconnecting) {
         console.log("Current user no longer in room, redirecting to home");
         setTimeout(() => {
-          localStorage.removeItem("pokerUserName");
           if (roomId) {
             localStorage.removeItem(`admin_${roomId}`);
             localStorage.removeItem(`storyData_${roomId}`);
@@ -1653,8 +1652,6 @@ export default function PokerRoom({ name, onLeaveRoom }) {
   const handleLeaveRoom = () => {
     // Notify server immediately so other participants' counts update right away
     socket.emit('leave-room', { roomId });
-    // Clear name from localStorage
-    localStorage.removeItem("pokerUserName");
     // Clear admin data for this room
     if (roomId) {
       localStorage.removeItem(`admin_${roomId}`);

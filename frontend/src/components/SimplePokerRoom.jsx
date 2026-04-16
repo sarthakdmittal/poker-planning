@@ -627,7 +627,6 @@ export default function SimplePokerRoom({ name, onLeaveRoom }) {
   const handleLeaveRoom = () => {
     // Notify server immediately so other participants' counts update right away
     socket.emit('leave-room', { roomId });
-    localStorage.removeItem("pokerUserName");
     if (roomId) {
       localStorage.removeItem(`simpleAdmin_${roomId}`);
       localStorage.removeItem(`simpleStoryData_${roomId}`);

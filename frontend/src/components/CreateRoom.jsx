@@ -14,13 +14,16 @@ const CUSTOM_AVATAR_F1 = "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F
 
 const EMOJI_AVATARS = ['🐺','🦁','🐯','🐻','🐼','🐨','🐸','🦄','🐲','🦅','🦉','🦋','🐙','🦀','🐬','🧙','🦸','🧛','🤖','👻','👽','🥷','🧝','🧜','🧚','🐱','🐶','🐧','🔥','🚀','⚡'];
 
+const MALE_HAIR   = 'top=shortCurly,shortFlat,shortRound,shortWaved,sides,theCaesar,theCaesarAndSidePart,shavedSides,shaggy,shaggyMullet,dreads01,dreads02';
+const FEMALE_HAIR = 'top=bigHair,bob,bun,curly,curvy,fro,froBand,longButNotTooLong,miaWallace,straight01,straight02,straightAndStrand&facialHairProbability=0';
+
 const AVATAR_SEEDS = {
-  male:   { style: 'micah',              custom: [CUSTOM_AVATAR_M1, CUSTOM_AVATAR_M2], seeds: ['Felix', 'Max', 'Oliver', 'Noah', 'Ethan', 'Jack', 'Henry', 'Leo', 'Oscar', 'James', 'Charlie', 'Hugo'] },
-  female: { style: 'lorelei',            custom: [CUSTOM_AVATAR_F1],                   seeds: ['Sophie', 'Emma', 'Lily', 'Mia', 'Ava', 'Grace', 'Ruby', 'Clara', 'Zoe', 'Luna', 'Stella', 'Aria'] },
-  other:  { style: 'notionists-neutral', custom: [],                                    seeds: ['Alex', 'Riley', 'Jordan', 'Casey', 'Morgan', 'Taylor', 'Avery', 'Quinn', 'Sage', 'Rowan', 'Sky', 'River'] },
+  male:   { style: 'avataaars',          params: MALE_HAIR,    custom: [CUSTOM_AVATAR_M1, CUSTOM_AVATAR_M2], seeds: ['Felix', 'Max', 'Oliver', 'Noah', 'Ethan', 'Jack', 'Henry', 'Leo', 'Oscar', 'James', 'Charlie', 'Hugo', 'Liam', 'Mason', 'Aiden', 'Lucas', 'Elijah', 'Logan', 'Caleb', 'Ryan'] },
+  female: { style: 'avataaars',          params: FEMALE_HAIR,  custom: [CUSTOM_AVATAR_F1],                   seeds: ['Sophie', 'Emma', 'Lily', 'Mia', 'Ava', 'Grace', 'Ruby', 'Clara', 'Zoe', 'Luna', 'Stella', 'Aria', 'Chloe', 'Isabella', 'Olivia', 'Nora', 'Elena', 'Violet', 'Harper', 'Aurora'] },
+  other:  { style: 'notionists-neutral', params: '',           custom: [],                                    seeds: ['Alex', 'Riley', 'Jordan', 'Casey', 'Morgan', 'Taylor', 'Avery', 'Quinn', 'Sage', 'Rowan', 'Sky', 'River'] },
 };
-const getAvatarUrl = (style, seed) =>
-  `${DICEBEAR_BASE}/${style}/svg?seed=${encodeURIComponent(seed)}&${AVATAR_BG}`;
+const getAvatarUrl = (style, seed, params = '') =>
+  `${DICEBEAR_BASE}/${style}/svg?seed=${encodeURIComponent(seed)}&${AVATAR_BG}${params ? '&' + params : ''}`;
 const resizeImage = (file) => new Promise((resolve) => {
   const reader = new FileReader();
   reader.onload = (ev) => {
@@ -77,12 +80,12 @@ export default function CreateRoom({ setName }) {
   const [error, setError] = useState('');
   const [generatedRoomId, setGeneratedRoomId] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedIcon, setSelectedIcon] = useState(null);
-  const [selectedGender, setSelectedGender] = useState(null);
+  const [selectedIcon, setSelectedIcon] = useState(() => localStorage.getItem('pokerUserIcon'));
+  const [selectedGender, setSelectedGender] = useState(() => localStorage.getItem('pokerUserGender'));
   const fileInputRef = useRef(null);
   const [roomIdCopied, setRoomIdCopied] = useState(false);
   const [socketConnected, setSocketConnected] = useState(socket.connected);
-  const [userNameState, setUserNameState] = useState('');
+  const [userNameState, setUserNameState] = useState(() => localStorage.getItem('pokerUserName') || '');
   const [selectedScale, setSelectedScale] = useState('FIBONACCI');
   const [customScaleInput, setCustomScaleInput] = useState('');
   const [showCustomScaleInput, setShowCustomScaleInput] = useState(false);
@@ -269,6 +272,18 @@ export default function CreateRoom({ setName }) {
     openPinModal('save');
   };
 
+  const updateSelectedIcon = (icon) => {
+    setSelectedIcon(icon);
+    if (icon) localStorage.setItem('pokerUserIcon', icon);
+    else localStorage.removeItem('pokerUserIcon');
+  };
+
+  const updateSelectedGender = (gender) => {
+    setSelectedGender(gender);
+    if (gender) localStorage.setItem('pokerUserGender', gender);
+    else localStorage.removeItem('pokerUserGender');
+  };
+
   const createRoom = (e) => {
     e.preventDefault();
 
@@ -287,6 +302,8 @@ export default function CreateRoom({ setName }) {
       setIsLoading(false);
       return;
     }
+
+    localStorage.setItem('pokerUserName', userName);
 
     // Validate Jira credentials if enabled
     if (enableJira) {
@@ -373,7 +390,7 @@ export default function CreateRoom({ setName }) {
     const file = e.target.files[0];
     if (!file) return;
     const resized = await resizeImage(file);
-    setSelectedIcon(resized);
+    updateSelectedIcon(resized);
     e.target.value = '';
   };
 
@@ -523,6 +540,8 @@ export default function CreateRoom({ setName }) {
               autoComplete="off"
               required
               maxLength={30}
+              value={userNameState}
+              onChange={(e) => { setUserNameState(e.target.value); localStorage.setItem('pokerUserName', e.target.value); }}
             />
             <div className="input-hint">This is how others will see you</div>
           </div>
@@ -540,7 +559,7 @@ export default function CreateRoom({ setName }) {
                   <img src={selectedIcon} alt="Your photo" className="uploaded-avatar-img" />
                   <div className="uploaded-avatar-info">
                     <span>Your photo selected</span>
-                    <button type="button" className="remove-upload-btn" onClick={() => setSelectedIcon(null)}>
+                    <button type="button" className="remove-upload-btn" onClick={() => updateSelectedIcon(null)}>
                       Remove
                     </button>
                   </div>
@@ -568,7 +587,7 @@ export default function CreateRoom({ setName }) {
                       key={key}
                       type="button"
                       className={`gender-btn ${selectedGender === key ? 'selected' : ''}`}
-                      onClick={() => { setSelectedGender(key); setSelectedIcon(null); }}
+                      onClick={() => { updateSelectedGender(key); updateSelectedIcon(null); }}
                     >
                       {label}
                     </button>
@@ -579,7 +598,7 @@ export default function CreateRoom({ setName }) {
                     <button
                       type="button"
                       className={`avatar-option avatar-none ${selectedIcon === null ? 'selected' : ''}`}
-                      onClick={() => setSelectedIcon(null)}
+                      onClick={() => updateSelectedIcon(null)}
                       title="No avatar (use initials)"
                     >
                       <span>A</span>
@@ -587,14 +606,14 @@ export default function CreateRoom({ setName }) {
                     {[
                       ...AVATAR_SEEDS[selectedGender].custom,
                       ...AVATAR_SEEDS[selectedGender].seeds.map(seed =>
-                        getAvatarUrl(AVATAR_SEEDS[selectedGender].style, seed)
+                        getAvatarUrl(AVATAR_SEEDS[selectedGender].style, seed, AVATAR_SEEDS[selectedGender].params)
                       ),
                     ].map((url, i) => (
                       <button
                         key={url.slice(0, 60) + i}
                         type="button"
                         className={`avatar-option ${selectedIcon === url ? 'selected' : ''}`}
-                        onClick={() => setSelectedIcon(selectedIcon === url ? null : url)}
+                        onClick={() => updateSelectedIcon(selectedIcon === url ? null : url)}
                       >
                         <img src={url} alt={`avatar-${i}`} loading="lazy" className="avatar-preset-img" />
                       </button>
@@ -604,7 +623,7 @@ export default function CreateRoom({ setName }) {
                         key={emoji}
                         type="button"
                         className={`avatar-option avatar-emoji ${selectedIcon === emoji ? 'selected' : ''}`}
-                        onClick={() => setSelectedIcon(selectedIcon === emoji ? null : emoji)}
+                        onClick={() => updateSelectedIcon(selectedIcon === emoji ? null : emoji)}
                         title={emoji}
                       >
                         <span className="avatar-emoji-icon">{emoji}</span>

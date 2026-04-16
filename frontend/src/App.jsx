@@ -32,7 +32,6 @@ function App() {
 
   const handleLeaveRoom = () => {
     setName("");
-    localStorage.removeItem("pokerUserName");
   };
 
   if (isLoading) {
