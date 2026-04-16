@@ -2378,6 +2378,25 @@ select.form-input {
   background: linear-gradient(135deg, #f0f2ff, #e8ecff);
 }
 
+.avatar-emoji {
+  background: #f5f5fa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-emoji.selected {
+  background: linear-gradient(135deg, #f0f2ff, #e8ecff);
+}
+
+.avatar-emoji-icon {
+  font-size: 30px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* ── In-room avatar image display ── */
 .avatar-img-display {
   width: 100%;
