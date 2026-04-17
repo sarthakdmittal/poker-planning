@@ -2912,7 +2912,6 @@ export default function PokerRoom({ name, onLeaveRoom }) {
           {/* Results Section */}
           {revealed && results && (
               <div className="results-section">
-                <h3>Voting Results</h3>
 
                 {allVotesSame ? (
                   <div className="perfect-agreement-outer">
@@ -2957,119 +2956,69 @@ export default function PokerRoom({ name, onLeaveRoom }) {
                   </div>
                   </div>
                 ) : (
-                  stats && (
-                    <div className="stats-wrapper">
-                      <div className="stats-header">
-                        <span className="stats-title">📊 Vote Analysis</span>
+                  stats && (() => {
+                    return (
+                      <div className="vr-panel">
+                        <div className="vr-panel__heading">Voting Results</div>
+
+                        {/* Stat chips */}
+                        <div className="vr-stats">
+                          <div className="vr-stat vr-stat--low">
+                            <span className="vr-stat__val">{stats.min}</span>
+                            <span className="vr-stat__label">Low</span>
+                          </div>
+                          <div className="vr-stat vr-stat--avg">
+                            <span className="vr-stat__val">{stats.avg}</span>
+                            <span className="vr-stat__label">Average</span>
+                          </div>
+                          <div className="vr-stat vr-stat--high">
+                            <span className="vr-stat__val">{stats.max}</span>
+                            <span className="vr-stat__label">High</span>
+                          </div>
+                          <div className="vr-stat vr-stat--spread">
+                            <span className="vr-stat__val">{stats.max - stats.min}</span>
+                            <span className="vr-stat__label">Spread</span>
+                          </div>
+                        </div>
+
                       </div>
-                      <div className="stats-grid">
-                        <div className="stat-card average">
-                          <div className="stat-icon">📈</div>
-                          <div className="stat-content">
-                            <span className="stat-label">Average</span>
-                            <span className="stat-value">{stats.avg}</span>
-                          </div>
-                          <div className="stat-trend">
-                            {stats.avg > 0 && <span className="trend-indicator">↗️</span>}
-                          </div>
-                        </div>
-
-                        <div className="stat-card minimum">
-                          <div className="stat-icon">⬇️</div>
-                          <div className="stat-content">
-                            <span className="stat-label">Minimum</span>
-                            <span className="stat-value">{stats.min}</span>
-                          </div>
-                        </div>
-
-                        <div className="stat-card maximum">
-                          <div className="stat-icon">⬆️</div>
-                          <div className="stat-content">
-                            <span className="stat-label">Maximum</span>
-                            <span className="stat-value">{stats.max}</span>
-                          </div>
-                        </div>
-
-                        <div className="stat-card count">
-                          <div className="stat-icon">👥</div>
-                          <div className="stat-content">
-                            <span className="stat-label">Total Votes</span>
-                            <span className="stat-value">{stats.count}</span>
-                          </div>
-                          <div className="stat-subtitle">
-                            {stats.count === 1 ? 'participant' : 'participants'}
-                          </div>
-                        </div>
-                      </div>
-
-                      {stats.min !== stats.max && (
-                          <div className="vote-range">
-                            <div className="range-label">Vote Range</div>
-                            <div className="range-bar-container">
-                              <div
-                                  className="range-bar"
-                                  style={{
-                                    left: `${(stats.min / stats.max) * 100}%`,
-                                    width: `${((stats.max - stats.min) / stats.max) * 100}%`
-                                  }}
-                              ></div>
-                              <div className="range-markers">
-                                <span className="range-min">{stats.min}</span>
-                                <span className="range-max">{stats.max}</span>
-                              </div>
-                            </div>
-                          </div>
-                      )}
-                    </div>
-                  )
+                    );
+                  })()
                 )}
 
-                <div className="votes-grid">
+                {/* Individual vote cards */}
+                <div className="vr-vote-grid">
                   {Object.entries(results.votes)
                     .sort(([, a], [, b]) => {
                       const na = parseFloat(a), nb = parseFloat(b);
                       if (!isNaN(na) && !isNaN(nb)) return na - nb;
                       return String(a).localeCompare(String(b));
                     })
-                    .map(([id, vote]) => {
-                    const isObservedUser = observingTarget === id;
-                    return (
+                    .map(([id, vote], idx) => {
+                      const isObservedUser = observingTarget === id;
+                      return (
                         <div
-                            key={id}
-                            className={`vote-item ${isObservedUser ? 'observed-vote-item' : ''}`}
+                          key={id}
+                          className={`vr-vote-card${isObservedUser ? ' vr-vote-card--observed' : ''}`}
+                          style={{'--idx': idx}}
                         >
                           <div
-                              className={`voter-avatar${userIcons[id] ? ' has-icon' : ''}${isImageUrl(userIcons[id]) ? ' has-img' : ''}`}
-                              style={userIcons[id] ? {} : { backgroundColor: getAvatarColor(results.users[id]) }}
+                            className={`vr-vote-card__avatar${userIcons[id] ? ' has-icon' : ''}${isImageUrl(userIcons[id]) ? ' has-img' : ''}`}
+                            style={userIcons[id] ? {} : { backgroundColor: getAvatarColor(results.users[id]) }}
                           >
                             {isImageUrl(userIcons[id])
                               ? <img src={userIcons[id]} alt={results.users[id]} className="avatar-img-display" />
                               : (userIcons[id] || getInitials(results.users[id]))}
                             {observers[id] && <FaUserSecret className="voter-observer-icon" />}
                           </div>
-                          <span className="voter-name" title={results.users[id]}>{results.users[id]}</span>
-                          <span className="vote-value">{vote}</span>
-                          {isObservedUser && <FaEye className="observed-eye" />}
+                          <span className="vr-vote-card__name" title={results.users[id]}>{results.users[id]}</span>
+                          <span className="vr-vote-card__badge">{vote}</span>
+                          {isObservedUser && <FaEye className="vr-vote-card__eye" />}
                         </div>
-                    );
+                      );
                   })}
                 </div>
 
-                {/* Quick Stats Summary */}
-                {stats && (
-                    <div className="stats-footer">
-                      <div className="stats-summary">
-                  <span className="summary-item">
-                    <span className="summary-dot" style={{ background: '#4CAF50' }}></span>
-                    Spread: {stats.max - stats.min} points
-                  </span>
-                        <span className="summary-item">
-                    <span className="summary-dot" style={{ background: '#FF9800' }}></span>
-                    Median: {stats.min === stats.max ? stats.min : Math.round((stats.min + stats.max) / 2)}
-                  </span>
-                      </div>
-                    </div>
-                )}
 
                 {/* Admin Controls */}
                 {isAdmin && (
