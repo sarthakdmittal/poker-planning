@@ -1658,7 +1658,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
   };
 
   const allVotesSame = results &&
-      Object.values(results.votes).length > 1 &&
+      Object.values(results.votes).length > 0 &&
       Object.values(results.votes).every(v => v === Object.values(results.votes)[0]);
 
   const observedVote = observingTarget && userVotes ? userVotes[observingTarget] : null;
