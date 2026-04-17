@@ -101,6 +101,33 @@
   font-size: 13px;
 }
 
+/* Tables */
+
+.jira-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 10px 0;
+  font-size: 13px;
+}
+
+.jira-table th,
+.jira-table td {
+  border: 1px solid #dfe1e6;
+  padding: 7px 12px;
+  vertical-align: top;
+  text-align: left;
+}
+
+.jira-table th {
+  background: #f4f5f7;
+  font-weight: 600;
+  color: #42526e;
+}
+
+.jira-table tr:nth-child(even) td {
+  background: #fafbfc;
+}
+
 /* Code block */
 
 .jira-code {

@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { socket } from "../socket";
 import { useParams } from 'react-router-dom';
 import Card from "./Card.jsx";
@@ -11,6 +11,7 @@ import {
 import '../../jira-content.css';
 import './PokerRoom.css';
 import StoryQueue from './StoryQueue';
+import JiraEditor from './JiraEditor';
 
 // Estimation scale types
 const ESTIMATION_SCALES = {
@@ -132,6 +133,11 @@ function jiraWikiToHtml(text) {
   let html = "";
   let listStack = [];
   let inCodeBlock = false;
+  let inTable = false;
+
+  function closeTable() {
+    if (inTable) { html += '</tbody></table>'; inTable = false; }
+  }
 
   function applyInlineFormatting(str) {
     if (!str) return "";
@@ -216,6 +222,7 @@ function jiraWikiToHtml(text) {
     // Handle headings
     const headingMatch = line.match(/^h([1-6])\.\s+(.*)/);
     if (headingMatch) {
+      closeTable();
       while (listStack.length) {
         html += `</${listStack.pop()}>`;
       }
@@ -266,6 +273,27 @@ function jiraWikiToHtml(text) {
       html += `</${listStack.pop()}>`;
     }
 
+    // Handle Jira table header row: ||col1||col2||...
+    if (line.startsWith('||')) {
+      if (!inTable) { inTable = true; }
+      const cells = line.replace(/^\|\|/, '').replace(/\|\|$/, '').split('||');
+      const ths = cells.map(c => `<th>${applyInlineFormatting(c.trim())}</th>`).join('');
+      html += `<table class="jira-table"><thead><tr>${ths}</tr></thead><tbody>`;
+      continue;
+    }
+
+    // Handle Jira table data row: |col1|col2|...
+    if (line.startsWith('|') && !line.startsWith('||')) {
+      if (!inTable) { html += '<table class="jira-table"><tbody>'; inTable = true; }
+      const cells = line.replace(/^\|/, '').replace(/\|$/, '').split('|');
+      const tds = cells.map(c => `<td>${applyInlineFormatting(c.trim())}</td>`).join('');
+      html += `<tr>${tds}</tr>`;
+      continue;
+    }
+
+    // Close any open table when a non-table line appears
+    closeTable();
+
     // Handle empty lines as paragraph breaks
     if (line === '') {
       html += '<br/>';
@@ -276,10 +304,11 @@ function jiraWikiToHtml(text) {
     html += `<p>${applyInlineFormatting(line)}</p>`;
   }
 
-  // Close any remaining lists
+  // Close any remaining lists or tables
   while (listStack.length) {
     html += `</${listStack.pop()}>`;
   }
+  closeTable();
 
   return html;
 }
@@ -480,13 +509,14 @@ export default function PokerRoom({ name, onLeaveRoom }) {
   const [issueTitle, setIssueTitle] = useState(null);
   const [acceptanceCriteria, setAcceptanceCriteria] = useState(null);
   const [description, setDescription] = useState(null);
-  const [showAcceptance, setShowAcceptance] = useState(false);
+  const [showAcceptance, setShowAcceptance] = useState(true);
   const [editingAcceptance, setEditingAcceptance] = useState(false);
   const [editAcceptanceValue, setEditAcceptanceValue] = useState("");
   const [editingAcceptanceVisual, setEditingAcceptanceVisual] = useState(false);
   const [editAcceptanceVisualValue, setEditAcceptanceVisualValue] = useState("");
-  const [showVisual, setShowVisual] = useState(false);
-  const [showDescription, setShowDescription] = useState(false);
+  const [tiptapAcceptanceHtml, setTiptapAcceptanceHtml] = useState("");
+  const [showVisual, setShowVisual] = useState(true);
+  const [showDescription, setShowDescription] = useState(true);
   const [storyList, setStoryList] = useState([]);
   const [currentStoryIndex, setCurrentStoryIndex] = useState(0);
   const [storyListInput, setStoryListInput] = useState("");
@@ -494,11 +524,53 @@ export default function PokerRoom({ name, onLeaveRoom }) {
   const [editDescriptionValue, setEditDescriptionValue] = useState("");
   const [editingDescriptionVisual, setEditingDescriptionVisual] = useState(false);
   const [editDescriptionVisualValue, setEditDescriptionVisualValue] = useState("");
+  const [tiptapDescriptionHtml, setTiptapDescriptionHtml] = useState("");
   const [selectedCard, setSelectedCard] = useState(null);
   const [votedUsers, setVotedUsers] = useState([]);
   const [issueType, setIssueType] = useState(null);
   const [copied, setCopied] = useState(false);
   const [storyStatus, setStoryStatus] = useState(""); // Tracks the current story status
+  const [fixVersions, setFixVersions] = useState([]);
+  const [attachments, setAttachments] = useState([]);
+  const [reporter, setReporter] = useState(null);
+  const [assignee, setAssignee] = useState(null);
+  // Fix versions editing
+  const [editingFixVersions, setEditingFixVersions] = useState(false);
+  const [allProjectVersions, setAllProjectVersions] = useState([]);
+  const [versionsLoading, setVersionsLoading] = useState(false);
+  const [selectedVersionIds, setSelectedVersionIds] = useState([]);
+  // Assignee editing
+  const [editingAssignee, setEditingAssignee] = useState(false);
+  const [assigneeSearchQuery, setAssigneeSearchQuery] = useState("");
+  const [assigneeSearchResults, setAssigneeSearchResults] = useState([]);
+  const [assigneeSearchLoading, setAssigneeSearchLoading] = useState(false);
+  // Attachments editing
+  const [editingAttachments, setEditingAttachments] = useState(false);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const attachmentInputRef = useRef(null);
+  // Priority
+  const [priority, setPriority] = useState(null);
+  const [priorityIconUrl, setPriorityIconUrl] = useState(null);
+  const [editingPriority, setEditingPriority] = useState(false);
+  const [allPriorities, setAllPriorities] = useState([]);
+  // Squad
+  const [squad, setSquad] = useState(null);
+  const [squadId, setSquadId] = useState(null);
+  const [editingSquad, setEditingSquad] = useState(false);
+  const [squadOptions, setSquadOptions] = useState([]);
+  // Resolution
+  const [resolution, setResolution] = useState(null);
+  const [editingResolution, setEditingResolution] = useState(false);
+  const [allResolutions, setAllResolutions] = useState([]);
+  // Sprint
+  const [sprints, setSprints] = useState([]);
+  const [editingSprint, setEditingSprint] = useState(false);
+  const [allSprints, setAllSprints] = useState([]);
+  // Epic link
+  const [epicLink, setEpicLink] = useState(null);
+  const [epicLinkKey, setEpicLinkKey] = useState(null);
+  const [editingEpicLink, setEditingEpicLink] = useState(false);
+  const [allEpics, setAllEpics] = useState([]);
   const [availableTransitions, setAvailableTransitions] = useState([]);
   const [isLoadingTransitions, setIsLoadingTransitions] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -513,7 +585,8 @@ export default function PokerRoom({ name, onLeaveRoom }) {
   const [allStoryDetails, setAllStoryDetails] = useState({});
   const [cards, setCards] = useState([0, 1, 2, 3, 5, 8, 13, 21]); // Default Fibonacci
   const [scaleType, setScaleType] = useState('FIBONACCI');
-  const [jiraConnected, setJiraConnected] = useState(false); // Add Jira connection status
+  const [jiraConnected, setJiraConnected] = useState(false);
+  const [jiraBaseUrl, setJiraBaseUrl] = useState(null);
   const [hasRestoredState, setHasRestoredState] = useState(false);
   const skipNextVoteUpdateRef = useRef(false);
   const [storyVoteHistory, setStoryVoteHistory] = useState({});
@@ -979,6 +1052,9 @@ export default function PokerRoom({ name, onLeaveRoom }) {
           console.log("⚠️ Jira not connected for this room");
         }
       }
+      if (data && data.jiraBaseUrl) {
+        setJiraBaseUrl(data.jiraBaseUrl);
+      }
 
       // Update cards based on room's estimation scale
       if (data && data.estimationScale) {
@@ -1123,6 +1199,18 @@ export default function PokerRoom({ name, onLeaveRoom }) {
       setIssueType(details.issueType);
       setEditingAcceptance(false);
       setStoryStatus(details.status || "To Do");
+      setFixVersions(details.fixVersions || []);
+      setAttachments(details.attachments || []);
+      setReporter(details.reporter || null);
+      setAssignee(details.assignee || null);
+      setPriority(details.priority || null);
+      setPriorityIconUrl(details.priorityIconUrl || null);
+      setResolution(details.resolution || null);
+      setSquad(details.squad || null);
+      setSquadId(details.squadId || null);
+      setEpicLink(details.epicLink || null);
+      setEpicLinkKey(details.epicLinkKey || null);
+      setSprints(details.sprints || []);
       setEditingAcceptanceVisual(false);
       setEditingDescription(false);
       setEditingDescriptionVisual(false);
@@ -1241,6 +1329,41 @@ export default function PokerRoom({ name, onLeaveRoom }) {
     };
   }, [name, users, roomId, jiraKey, revealed, isReconnecting, jiraConnected]);
 
+  // Stable listeners that must not be torn down mid-request
+  useEffect(() => {
+    const handleProjectVersions = ({ versions }) => {
+      console.log("Received projectVersions:", versions);
+      setAllProjectVersions(versions || []);
+      setVersionsLoading(false);
+    };
+    const handleUserSearch = ({ users: results }) => {
+      setAssigneeSearchResults(results || []);
+      setAssigneeSearchLoading(false);
+    };
+    const handlePriorities = ({ priorities }) => setAllPriorities(priorities || []);
+    const handleSquadOptions = ({ options }) => setSquadOptions(options || []);
+    const handleResolutions = ({ resolutions }) => setAllResolutions(resolutions || []);
+    const handleSprints = ({ sprints }) => setAllSprints(sprints || []);
+    const handleEpics = ({ epics }) => setAllEpics(epics || []);
+
+    socket.on("projectVersions", handleProjectVersions);
+    socket.on("jiraUserSearchResults", handleUserSearch);
+    socket.on("priorities", handlePriorities);
+    socket.on("squadOptions", handleSquadOptions);
+    socket.on("resolutions", handleResolutions);
+    socket.on("sprints", handleSprints);
+    socket.on("epics", handleEpics);
+    return () => {
+      socket.off("projectVersions", handleProjectVersions);
+      socket.off("jiraUserSearchResults", handleUserSearch);
+      socket.off("priorities", handlePriorities);
+      socket.off("squadOptions", handleSquadOptions);
+      socket.off("resolutions", handleResolutions);
+      socket.off("sprints", handleSprints);
+      socket.off("epics", handleEpics);
+    };
+  }, []);
+
   const isAdmin = name && adminName && name === adminName;
 
   // Get current user's ID
@@ -1329,6 +1452,16 @@ export default function PokerRoom({ name, onLeaveRoom }) {
       }
     }
   }, [storyStatus, isAdmin]);
+
+  // Pre-select current fix versions when allProjectVersions loads
+  useEffect(() => {
+    if (allProjectVersions.length > 0 && fixVersions.length > 0) {
+      const matched = allProjectVersions
+        .filter(v => fixVersions.includes(v.name))
+        .map(v => v.id);
+      setSelectedVersionIds(matched);
+    }
+  }, [allProjectVersions]);
 
   // Add this near your other useEffects - REPLACE the existing reconnection useEffect
   useEffect(() => {
@@ -1609,8 +1742,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
   };
 
   const handleSaveVisualAcceptance = () => {
-    const html = acceptanceEditorRef.current.innerHTML;
-    const wikiContent = htmlToJiraWiki(html);
+    const wikiContent = htmlToJiraWiki(tiptapAcceptanceHtml);
     socket.emit("updateAcceptanceCriteria", {
       roomId,
       jiraKey,
@@ -1620,8 +1752,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
   };
 
   const handleSaveVisualDescription = () => {
-    const html = descriptionEditorRef.current.innerHTML;
-    const wikiContent = htmlToJiraWiki(html);
+    const wikiContent = htmlToJiraWiki(tiptapDescriptionHtml);
     socket.emit("updateDescription", {
       roomId,
       jiraKey,
@@ -1639,6 +1770,116 @@ export default function PokerRoom({ name, onLeaveRoom }) {
         jiraKey,
         status: newStatus
       });
+    }
+  };
+
+  // Extract project key from jiraKey (e.g. "EIPAAS-123" -> "EIPAAS")
+  const getProjectKey = () => jiraKey ? jiraKey.split("-")[0] : null;
+
+  const handleEditFixVersions = () => {
+    const projectKey = getProjectKey();
+    console.log("Opening fix versions editor, projectKey:", projectKey, "roomId:", roomId);
+    setAllProjectVersions([]);
+    setVersionsLoading(true);
+    setSelectedVersionIds([]);
+    setEditingFixVersions(true);
+    if (projectKey) {
+      socket.emit("getProjectVersions", { roomId, projectKey });
+    }
+  };
+
+  // Once we get allProjectVersions, pre-select the currently set ones
+  const handleVersionCheckboxChange = (versionId) => {
+    setSelectedVersionIds(prev =>
+      prev.includes(versionId) ? prev.filter(id => id !== versionId) : [...prev, versionId]
+    );
+  };
+
+  const handleSaveFixVersions = () => {
+    socket.emit("updateFixVersions", { roomId, jiraKey, versionIds: selectedVersionIds });
+    setEditingFixVersions(false);
+  };
+
+  const handleEditAssignee = () => {
+    setAssigneeSearchQuery("");
+    setAssigneeSearchResults([]);
+    setEditingAssignee(true);
+  };
+
+  const handleAssigneeSearch = (query) => {
+    setAssigneeSearchQuery(query);
+    if (query.length >= 2) {
+      setAssigneeSearchLoading(true);
+      socket.emit("searchJiraUsers", { roomId, query });
+    } else {
+      setAssigneeSearchResults([]);
+    }
+  };
+
+  const handleSelectAssignee = (user) => {
+    socket.emit("updateAssignee", { roomId, jiraKey, accountId: user.accountId });
+    setEditingAssignee(false);
+    setAssigneeSearchQuery("");
+    setAssigneeSearchResults([]);
+  };
+
+  const handleEditPriority = () => {
+    socket.emit("getPriorities", { roomId });
+    setEditingPriority(true);
+  };
+
+  const handleEditSquad = () => {
+    socket.emit("getSquadOptions", { roomId, jiraKey });
+    setEditingSquad(true);
+  };
+
+  const handleEditResolution = () => {
+    socket.emit("getResolutions", { roomId });
+    setEditingResolution(true);
+  };
+
+  const handleEditSprint = () => {
+    socket.emit("getSprints", { roomId, projectKey: getProjectKey() });
+    setEditingSprint(true);
+  };
+
+  const handleEditEpicLink = () => {
+    socket.emit("getEpics", { roomId, projectKey: getProjectKey() });
+    setEditingEpicLink(true);
+  };
+
+  const handleDeleteAttachment = (attachmentId) => {
+    if (!window.confirm("Delete this attachment?")) return;
+    socket.emit("deleteAttachment", { roomId, jiraKey, attachmentId });
+  };
+
+  const handleAttachmentUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setUploadingAttachment(true);
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:4000";
+      const res = await fetch(`${backendUrl}/api/attachment/${roomId}/${jiraKey}`, {
+        method: "POST",
+        body: formData
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        alert("Upload failed: " + (err.error || res.statusText));
+      } else {
+        // Refresh issue details
+        socket.emit("fetchJiraDetails", { roomId, jiraKey });
+      }
+    } catch (err) {
+      alert("Upload failed: " + err.message);
+    } finally {
+      setUploadingAttachment(false);
+      if (attachmentInputRef.current) attachmentInputRef.current.value = "";
     }
   };
 
@@ -2105,7 +2346,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
                                   fetchAvailableTransitions(jiraKey);
                                 }
                               }}
-                              disabled={isCurrentUserObserver || !isAdmin}
+                              disabled={!isAdmin && isCurrentUserObserver}
                           >
                             {availableTransitions.length > 0 ? (
                                 availableTransitions.map(status => (
@@ -2116,6 +2357,318 @@ export default function PokerRoom({ name, onLeaveRoom }) {
                             )}
                           </select>
                       )}
+                    </div>
+                )}
+
+                {jiraConnected && (reporter || assignee != null || fixVersions.length > 0 || attachments.length > 0 || isAdmin) && (
+                    <div className="story-meta-fields">
+                      <div className="story-meta-col">
+
+                      {/* Reporter — read-only */}
+                      {reporter && (
+                          <div className="story-meta-item">
+                            <span className="story-meta-label">Reporter:</span>
+                            <span className="story-meta-value">{reporter}</span>
+                          </div>
+                      )}
+
+                      {/* Assignee — editable */}
+                      <div className="story-meta-item story-meta-item--editable">
+                        <span className="story-meta-label">Assignee:</span>
+                        {editingAssignee ? (
+                            <div className="meta-edit-inline">
+                              <input
+                                  className="meta-edit-input"
+                                  type="text"
+                                  placeholder="Search by name..."
+                                  value={assigneeSearchQuery}
+                                  onChange={e => handleAssigneeSearch(e.target.value)}
+                                  autoFocus
+                              />
+                              {assigneeSearchLoading && <span className="meta-spinner">…</span>}
+                              {assigneeSearchResults.length > 0 && (
+                                  <ul className="meta-user-dropdown">
+                                    {assigneeSearchResults.map(u => (
+                                        <li
+                                            key={u.accountId}
+                                            className="meta-user-option"
+                                            onClick={() => handleSelectAssignee(u)}
+                                        >
+                                          {u.avatarUrl && <img src={u.avatarUrl} alt="" className="meta-user-avatar" />}
+                                          <span className="meta-user-info">
+                                            <span className="meta-user-name">{u.displayName}</span>
+                                            {u.emailAddress && <span className="meta-user-email">{u.emailAddress}</span>}
+                                          </span>
+                                        </li>
+                                    ))}
+                                  </ul>
+                              )}
+                              <button className="meta-btn-cancel" onClick={() => setEditingAssignee(false)}>✕</button>
+                            </div>
+                        ) : (
+                            <span className="story-meta-value">
+                              {assignee || <em className="meta-none">Unassigned</em>}
+                              {isAdmin && (
+                                  <button className="meta-edit-btn" onClick={handleEditAssignee} title="Edit assignee">✎</button>
+                              )}
+                            </span>
+                        )}
+                      </div>
+
+                      {/* Fix Version/s — editable */}
+                      <div className="story-meta-item story-meta-item--editable">
+                        <span className="story-meta-label">Fix Version/s:</span>
+                        {editingFixVersions ? (
+                            <div className="meta-edit-inline meta-edit-versions">
+                              {versionsLoading ? (
+                                  <span className="meta-spinner">Loading versions…</span>
+                              ) : allProjectVersions.length === 0 ? (
+                                  <span className="meta-spinner">No versions found for this project.</span>
+                              ) : (
+                                  <div className="meta-versions-list">
+                                    {allProjectVersions.filter(v => !v.archived).map(v => (
+                                        <label key={v.id} className="meta-version-checkbox">
+                                          <input
+                                              type="checkbox"
+                                              checked={selectedVersionIds.includes(v.id)}
+                                              onChange={() => handleVersionCheckboxChange(v.id)}
+                                          />
+                                          <span className={v.released ? "meta-version-released" : "meta-version-unreleased"}>
+                                            {v.name}
+                                          </span>
+                                        </label>
+                                    ))}
+                                  </div>
+                              )}
+                              <div className="meta-edit-actions">
+                                <button className="meta-btn-save" onClick={handleSaveFixVersions}>Save</button>
+                                <button className="meta-btn-cancel" onClick={() => setEditingFixVersions(false)}>Cancel</button>
+                              </div>
+                            </div>
+                        ) : (
+                            <span className="story-meta-value">
+                              {fixVersions.length > 0
+                                  ? fixVersions.map((v, i) => <span key={i} className="story-version-tag">{v}</span>)
+                                  : <em className="meta-none">None</em>
+                              }
+                              {isAdmin && (
+                                  <button className="meta-edit-btn" onClick={handleEditFixVersions} title="Edit fix versions">✎</button>
+                              )}
+                            </span>
+                        )}
+                      </div>
+
+                      {/* Attachments — upload + delete */}
+                      <div className="story-meta-item story-meta-attachments story-meta-item--editable">
+                        <span className="story-meta-label">Attachments:</span>
+                        <div className="story-meta-value" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
+                          <div className="story-attachments-list">
+                            {attachments.map((att) => (
+                                <div key={att.id} className="story-attachment-entry">
+                                  <a
+                                      href={att.content}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="story-attachment-link"
+                                      title={`${att.filename} (${(att.size / 1024).toFixed(1)} KB)`}
+                                  >
+                                    {att.thumbnail && att.mimeType?.startsWith('image/') ? (
+                                        <img src={att.thumbnail} alt={att.filename} className="story-attachment-thumb" />
+                                    ) : (
+                                        <span className="story-attachment-icon">📎</span>
+                                    )}
+                                    <span className="story-attachment-name">{att.filename}</span>
+                                  </a>
+                                  {isAdmin && (
+                                      <button
+                                          className="meta-attachment-delete"
+                                          onClick={() => handleDeleteAttachment(att.id)}
+                                          title="Delete attachment"
+                                      >✕</button>
+                                  )}
+                                </div>
+                            ))}
+                            {attachments.length === 0 && <em className="meta-none">No attachments</em>}
+                          </div>
+                          {isAdmin && (
+                              <div className="meta-attachment-upload">
+                                <input
+                                    ref={attachmentInputRef}
+                                    type="file"
+                                    id="attachment-upload-input"
+                                    style={{ display: 'none' }}
+                                    onChange={handleAttachmentUpload}
+                                />
+                                <button
+                                    className="meta-btn-upload"
+                                    onClick={() => attachmentInputRef.current?.click()}
+                                    disabled={uploadingAttachment}
+                                >
+                                  {uploadingAttachment ? "Uploading…" : "+ Attach file"}
+                                </button>
+                              </div>
+                          )}
+                        </div>
+                      </div>
+
+                      </div>{/* end story-meta-col left */}
+                      <div className="story-meta-col">
+
+                      {/* Priority */}
+                      <div className="story-meta-item story-meta-item--editable">
+                        <span className="story-meta-label">Priority:</span>
+                        {editingPriority ? (
+                            <div className="meta-edit-inline">
+                              <select className="meta-edit-select" autoFocus
+                                  onChange={e => {
+                                    socket.emit("updatePriority", { roomId, jiraKey, priorityName: e.target.value });
+                                    setEditingPriority(false);
+                                  }}
+                                  defaultValue=""
+                              >
+                                <option value="" disabled>Select priority…</option>
+                                {allPriorities.map(p => (
+                                    <option key={p.id} value={p.name}>{p.name}</option>
+                                ))}
+                              </select>
+                              <button className="meta-btn-cancel" onClick={() => setEditingPriority(false)}>Cancel</button>
+                            </div>
+                        ) : (
+                            <span className="story-meta-value">
+                              {priority ? (
+                                  <span className="meta-priority">
+                                    {priorityIconUrl && <img src={priorityIconUrl} alt={priority} className="meta-priority-icon" />}
+                                    {priority}
+                                  </span>
+                              ) : <em className="meta-none">None</em>}
+                              {isAdmin && <button className="meta-edit-btn" onClick={handleEditPriority} title="Edit priority">✎</button>}
+                            </span>
+                        )}
+                      </div>
+
+                      {/* Resolution */}
+                      <div className="story-meta-item story-meta-item--editable">
+                        <span className="story-meta-label">Resolution:</span>
+                        {editingResolution ? (
+                            <div className="meta-edit-inline">
+                              <select className="meta-edit-select" autoFocus
+                                  onChange={e => {
+                                    socket.emit("updateResolution", { roomId, jiraKey, resolutionName: e.target.value });
+                                    setEditingResolution(false);
+                                  }}
+                                  defaultValue=""
+                              >
+                                <option value="" disabled>Select resolution…</option>
+                                {allResolutions.map(r => (
+                                    <option key={r.id} value={r.name}>{r.name}</option>
+                                ))}
+                              </select>
+                              <button className="meta-btn-cancel" onClick={() => setEditingResolution(false)}>Cancel</button>
+                            </div>
+                        ) : (
+                            <span className="story-meta-value">
+                              {resolution || <em className="meta-none">Unresolved</em>}
+                              {isAdmin && <button className="meta-edit-btn" onClick={handleEditResolution} title="Edit resolution">✎</button>}
+                            </span>
+                        )}
+                      </div>
+
+                      {/* Squad */}
+                      <div className="story-meta-item story-meta-item--editable">
+                        <span className="story-meta-label">Squad:</span>
+                        {editingSquad ? (
+                            <div className="meta-edit-inline">
+                              <select className="meta-edit-select" autoFocus
+                                  onChange={e => {
+                                    socket.emit("updateSquad", { roomId, jiraKey, squadId: e.target.value });
+                                    setEditingSquad(false);
+                                  }}
+                                  defaultValue=""
+                              >
+                                <option value="" disabled>Select squad…</option>
+                                {squadOptions.map(s => (
+                                    <option key={s.id} value={s.id}>{s.value}</option>
+                                ))}
+                              </select>
+                              <button className="meta-btn-cancel" onClick={() => setEditingSquad(false)}>Cancel</button>
+                            </div>
+                        ) : (
+                            <span className="story-meta-value">
+                              {squad || <em className="meta-none">None</em>}
+                              {isAdmin && <button className="meta-edit-btn" onClick={handleEditSquad} title="Edit squad">✎</button>}
+                            </span>
+                        )}
+                      </div>
+
+                      {/* Sprint */}
+                      <div className="story-meta-item story-meta-item--editable">
+                        <span className="story-meta-label">Sprint:</span>
+                        {editingSprint ? (
+                            <div className="meta-edit-inline">
+                              <select className="meta-edit-select" autoFocus
+                                  onChange={e => {
+                                    socket.emit("updateSprint", { roomId, jiraKey, sprintId: parseInt(e.target.value) });
+                                    setEditingSprint(false);
+                                  }}
+                                  defaultValue=""
+                              >
+                                <option value="" disabled>Select sprint…</option>
+                                {allSprints.map(s => (
+                                    <option key={s.id} value={s.id}>{s.name} {s.state === 'active' ? '(active)' : ''}</option>
+                                ))}
+                              </select>
+                              <button className="meta-btn-cancel" onClick={() => setEditingSprint(false)}>Cancel</button>
+                            </div>
+                        ) : (
+                            <span className="story-meta-value">
+                              {sprints.length > 0
+                                  ? sprints.map(s => (
+                                      <span key={s.id} className={`story-version-tag ${s.state === 'active' ? 'meta-sprint-active' : ''}`}>{s.name}</span>
+                                  ))
+                                  : <em className="meta-none">None</em>}
+                              {isAdmin && <button className="meta-edit-btn" onClick={handleEditSprint} title="Edit sprint">✎</button>}
+                            </span>
+                        )}
+                      </div>
+
+                      {/* Epic Link */}
+                      <div className="story-meta-item story-meta-item--editable">
+                        <span className="story-meta-label">Epic Link:</span>
+                        {editingEpicLink ? (
+                            <div className="meta-edit-inline">
+                              <select className="meta-edit-select" autoFocus
+                                  onChange={e => {
+                                    socket.emit("updateEpicLink", { roomId, jiraKey, epicKey: e.target.value || null });
+                                    setEditingEpicLink(false);
+                                  }}
+                                  defaultValue={epicLinkKey || ""}
+                              >
+                                <option value="">None</option>
+                                {allEpics.map(e => (
+                                    <option key={e.key} value={e.key}>{e.key} – {e.name}</option>
+                                ))}
+                              </select>
+                              <button className="meta-btn-cancel" onClick={() => setEditingEpicLink(false)}>Cancel</button>
+                            </div>
+                        ) : (
+                            <span className="story-meta-value">
+                              {epicLink
+                                  ? (jiraBaseUrl && epicLinkKey
+                                      ? <a
+                                          href={`${jiraBaseUrl}/browse/${epicLinkKey}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="meta-epic-tag meta-epic-link"
+                                          title={`${epicLinkKey} — open in Jira`}
+                                        >{epicLink}</a>
+                                      : <span className="meta-epic-tag">{epicLink}</span>)
+                                  : <em className="meta-none">None</em>}
+                              {isAdmin && <button className="meta-edit-btn" onClick={handleEditEpicLink} title="Edit epic link">✎</button>}
+                            </span>
+                        )}
+                      </div>
+
+                      </div>{/* end story-meta-col right */}
                     </div>
                 )}
 
@@ -2153,26 +2706,21 @@ export default function PokerRoom({ name, onLeaveRoom }) {
                     <div className="story-content">
                       <div className="content-header">
                         <strong>Acceptance Criteria</strong>
-                        {isAdmin && !editingAcceptance && !editingAcceptanceVisual && !isCurrentUserObserver && jiraConnected && (
+                        {isAdmin && !editingAcceptance && !editingAcceptanceVisual && jiraConnected && (
                             <div className="edit-buttons">
                               <button
                                   className="edit-btn"
                                   onClick={() => {
-                                    setEditingAcceptance(true);
-                                    setEditAcceptanceValue(acceptanceCriteria);
+                                    if (showVisual) {
+                                      setEditingAcceptanceVisual(true);
+                                    } else {
+                                      setEditingAcceptance(true);
+                                      setEditAcceptanceValue(acceptanceCriteria);
+                                    }
                                   }}
-                                  title="Edit in raw text mode"
+                                  title={showVisual ? "Edit in formatted mode" : "Edit in raw text mode"}
                               >
-                                <FaPencilAlt /> Raw
-                              </button>
-                              <button
-                                  className="edit-btn visual-edit-btn"
-                                  onClick={() => {
-                                    setEditingAcceptanceVisual(true);
-                                  }}
-                                  title="Edit in formatted mode"
-                              >
-                                <FaEye /> Formatted
+                                <FaPencilAlt /> Edit
                               </button>
                             </div>
                         )}
@@ -2203,86 +2751,10 @@ export default function PokerRoom({ name, onLeaveRoom }) {
                           </div>
                       ) : (
                           <div className="edit-mode visual-edit-mode">
-                            <div className="visual-edit-toolbar">
-                              <button
-                                  className="toolbar-btn"
-                                  onClick={() => applyFormatting('bold', null, 'acceptance')}
-                                  title="Bold"
-                                  type="button"
-                              >
-                                <FaBold />
-                              </button>
-                              <button
-                                  className="toolbar-btn"
-                                  onClick={() => applyFormatting('italic', null, 'acceptance')}
-                                  title="Italic"
-                                  type="button"
-                              >
-                                <FaItalic />
-                              </button>
-                              <button
-                                  className="toolbar-btn"
-                                  onClick={() => applyFormatting('underline', null, 'acceptance')}
-                                  title="Underline"
-                                  type="button"
-                              >
-                                <FaUnderline />
-                              </button>
-                              <div className="toolbar-divider"></div>
-                              <button
-                                  className="toolbar-btn"
-                                  onClick={() => applyFormatting('insertUnorderedList', null, 'acceptance')}
-                                  title="Bullet List"
-                                  type="button"
-                              >
-                                <FaListUl />
-                              </button>
-                              <button
-                                  className="toolbar-btn"
-                                  onClick={() => applyFormatting('insertOrderedList', null, 'acceptance')}
-                                  title="Numbered List"
-                                  type="button"
-                              >
-                                <FaListOl />
-                              </button>
-                              <div className="toolbar-divider"></div>
-                              <button
-                                  className="toolbar-btn"
-                                  onClick={() => applyFormatting('formatBlock', 'h3', 'acceptance')}
-                                  title="Heading"
-                                  type="button"
-                              >
-                                <FaHeading />
-                              </button>
-                              <button
-                                  className="toolbar-btn"
-                                  onClick={() => insertJiraFormatting('code', 'acceptance')}
-                                  title="Code"
-                                  type="button"
-                              >
-                                <FaCode />
-                              </button>
-                              <span className="toolbar-hint">Editor</span>
-                            </div>
-                            <div
-                                ref={acceptanceEditorRef}
-                                className="visual-editor active"
-                                contentEditable={true}
-                                dangerouslySetInnerHTML={{ __html: editAcceptanceVisualValue }}
-                                suppressContentEditableWarning={true}
-                                style={{
-                                  border: '1px solid #ddd',
-                                  padding: '16px',
-                                  minHeight: '250px',
-                                  maxHeight: '500px',
-                                  overflowY: 'auto',
-                                  borderRadius: '4px',
-                                  backgroundColor: 'white',
-                                  outline: 'none',
-                                  fontFamily: 'Arial, sans-serif',
-                                  fontSize: '14px',
-                                  lineHeight: '1.5'
-                                }}
+                            <JiraEditor
+                                content={jiraWikiToHtml(acceptanceCriteria)}
+                                onChange={setTiptapAcceptanceHtml}
+                                placeholder="Add acceptance criteria…"
                             />
                             <div className="edit-actions">
                               <button className="btn-save" onClick={handleSaveVisualAcceptance}>Save</button>
@@ -2297,26 +2769,21 @@ export default function PokerRoom({ name, onLeaveRoom }) {
                     <div className="story-content">
                       <div className="content-header">
                         <strong>Description</strong>
-                        {isAdmin && !editingDescription && !editingDescriptionVisual && !isCurrentUserObserver && jiraConnected && (
+                        {isAdmin && !editingDescription && !editingDescriptionVisual && jiraConnected && (
                             <div className="edit-buttons">
                               <button
                                   className="edit-btn"
                                   onClick={() => {
-                                    setEditingDescription(true);
-                                    setEditDescriptionValue(description);
+                                    if (showVisual) {
+                                      setEditingDescriptionVisual(true);
+                                    } else {
+                                      setEditingDescription(true);
+                                      setEditDescriptionValue(description);
+                                    }
                                   }}
-                                  title="Edit in raw text mode"
+                                  title={showVisual ? "Edit in formatted mode" : "Edit in raw text mode"}
                               >
-                                <FaPencilAlt /> Raw
-                              </button>
-                              <button
-                                  className="edit-btn visual-edit-btn"
-                                  onClick={() => {
-                                    setEditingDescriptionVisual(true);
-                                  }}
-                                  title="Edit in formatted mode"
-                              >
-                                <FaEye /> Formatted
+                                <FaPencilAlt /> Edit
                               </button>
                             </div>
                         )}
@@ -2347,96 +2814,10 @@ export default function PokerRoom({ name, onLeaveRoom }) {
                           </div>
                       ) : (
                           <div className="edit-mode visual-edit-mode">
-                            <div className="visual-edit-toolbar">
-                              <button
-                                  className="toolbar-btn"
-                                  onClick={() => applyFormatting('bold', null, 'description')}
-                                  title="Bold"
-                                  type="button"
-                              >
-                                <FaBold />
-                              </button>
-                              <button
-                                  className="toolbar-btn"
-                                  onClick={() => applyFormatting('italic', null, 'description')}
-                                  title="Italic"
-                                  type="button"
-                              >
-                                <FaItalic />
-                              </button>
-                              <button
-                                  className="toolbar-btn"
-                                  onClick={() => applyFormatting('underline', null, 'description')}
-                                  title="Underline"
-                                  type="button"
-                              >
-                                <FaUnderline />
-                              </button>
-                              <div className="toolbar-divider"></div>
-                              <button
-                                  className="toolbar-btn"
-                                  onClick={() => applyFormatting('insertUnorderedList', null, 'description')}
-                                  title="Bullet List"
-                                  type="button"
-                              >
-                                <FaListUl />
-                              </button>
-                              <button
-                                  className="toolbar-btn"
-                                  onClick={() => applyFormatting('insertOrderedList', null, 'description')}
-                                  title="Numbered List"
-                                  type="button"
-                              >
-                                <FaListOl />
-                              </button>
-                              <div className="toolbar-divider"></div>
-                              <button
-                                  className="toolbar-btn"
-                                  onClick={() => applyFormatting('formatBlock', 'h3', 'description')}
-                                  title="Heading"
-                                  type="button"
-                              >
-                                <FaHeading />
-                              </button>
-                              <button
-                                  className="toolbar-btn"
-                                  onClick={() => insertJiraFormatting('code', 'description')}
-                                  title="Code"
-                                  type="button"
-                              >
-                                <FaCode />
-                              </button>
-                              <span className="toolbar-hint">Editor</span>
-                            </div>
-                            <div
-                                ref={descriptionEditorRef}
-                                className="visual-editor active"
-                                contentEditable={true}
-                                dangerouslySetInnerHTML={{ __html: editDescriptionVisualValue }}
-                                onInput={(e) => {
-                                  const el = e.currentTarget;
-                                  const savedPos = saveCursorPosition(el);
-                                  const html = el.innerHTML;
-                                  setEditDescriptionVisualValue(html);
-                                  requestAnimationFrame(() => {
-                                    if (el && savedPos) restoreCursorPosition(el, savedPos);
-                                  });
-                                }}
-                                onBlur={(e) => setEditDescriptionVisualValue(e.currentTarget.innerHTML)}
-                                style={{
-                                  border: '1px solid #ddd',
-                                  padding: '16px',
-                                  minHeight: '250px',
-                                  maxHeight: '500px',
-                                  overflowY: 'auto',
-                                  borderRadius: '4px',
-                                  backgroundColor: 'white',
-                                  outline: 'none',
-                                  fontFamily: 'Arial, sans-serif',
-                                  fontSize: '14px',
-                                  lineHeight: '1.5'
-                                }}
-                                suppressContentEditableWarning={true}
+                            <JiraEditor
+                                content={jiraWikiToHtml(description)}
+                                onChange={setTiptapDescriptionHtml}
+                                placeholder="Add description…"
                             />
                             <div className="edit-actions">
                               <button className="btn-save" onClick={handleSaveVisualDescription}>Save</button>
@@ -2475,8 +2856,8 @@ export default function PokerRoom({ name, onLeaveRoom }) {
                   </div>
               )}
 
-          {/* Card Selection Area */}
-          {!revealed && (
+          {/* Card Selection Area — hidden entirely for observers */}
+          {!revealed && !isCurrentUserObserver && (
               <div className="voting-section">
                 <h3>Select your estimate</h3>
 
@@ -2490,29 +2871,19 @@ export default function PokerRoom({ name, onLeaveRoom }) {
                 </span>
                 </div>
 
-                {/* Always show cards for non-observers */}
-                {!isCurrentUserObserver && (
-                    <div className="cards-grid">
-                      {cards.map((c) => (
-                          <Card
-                              key={c}
-                              value={c}
-                              onClick={(value) => {
-                                console.log("Card onClick triggered with value:", value);
-                                handleVote(value);
-                              }}
-                              selected={selectedCard === c}
-                          />
-                      ))}
-                    </div>
-                )}
-
-                {/* Observer message */}
-                {isCurrentUserObserver && (
-                    <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
-                      <p>You are in observer mode and cannot vote</p>
-                    </div>
-                )}
+                <div className="cards-grid">
+                  {cards.map((c) => (
+                      <Card
+                          key={c}
+                          value={c}
+                          onClick={(value) => {
+                            console.log("Card onClick triggered with value:", value);
+                            handleVote(value);
+                          }}
+                          selected={selectedCard === c}
+                      />
+                  ))}
+                </div>
 
                 {/* Reveal button - ALWAYS show for admin, regardless of observer mode */}
                 {isAdmin && (
@@ -2523,6 +2894,15 @@ export default function PokerRoom({ name, onLeaveRoom }) {
                       <FaEye /> Reveal Votes
                     </button>
                 )}
+              </div>
+          )}
+
+          {/* Reveal button for admin observers */}
+          {!revealed && isCurrentUserObserver && isAdmin && (
+              <div style={{ textAlign: 'center', marginTop: 16 }}>
+                <button className="btn-reveal" onClick={handleReveal}>
+                  <FaEye /> Reveal Votes
+                </button>
               </div>
           )}
 
@@ -2548,7 +2928,6 @@ export default function PokerRoom({ name, onLeaveRoom }) {
               <div className="observer-placeholder">
                 <FaUserSecret className="placeholder-icon" />
                 <h3>You are in Observer Mode</h3>
-                <p>Click the <FaEye /> icon on any participant to view their screen</p>
               </div>
           )}
 

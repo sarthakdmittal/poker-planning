@@ -2925,7 +2925,7 @@
 
 /* Make sure story content has proper max-height and scrolling */
 .story-content {
-  max-height: 400px;
+  max-height: 900px;
   overflow-y: auto;
   margin-top: 10px;
   padding-right: 10px;
@@ -2933,7 +2933,7 @@
 
 /* Style for the formatted view to ensure it scrolls properly */
 .jira-content.formatted-view {
-  max-height: 350px;
+  max-height: 850px;
   overflow-y: auto;
   padding: 15px;
   background-color: #f9f9f9;
@@ -2943,7 +2943,7 @@
 
 /* Style for raw text view */
 .text-content.raw-view {
-  max-height: 350px;
+  max-height: 850px;
   overflow-y: auto;
   white-space: pre-wrap;
   word-wrap: break-word;
@@ -3743,4 +3743,421 @@
     background: rgba(74, 58, 255, 0.2);
     color: #cbd5e1;
   }
+}
+
+/* Story Meta Fields (Reporter, Assignee, Fix Versions, Attachments) */
+.story-meta-fields {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0;
+  padding: 10px 14px;
+  margin: 8px 0;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.05), rgba(118, 75, 162, 0.05));
+  border: 1px solid rgba(102, 126, 234, 0.15);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.story-meta-col {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.story-meta-col:first-child {
+  padding-right: 16px;
+  border-right: 1px solid rgba(102, 126, 234, 0.2);
+}
+
+.story-meta-col:last-child {
+  padding-left: 16px;
+}
+
+.story-meta-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.story-meta-label {
+  font-weight: 600;
+  color: #667eea;
+  white-space: nowrap;
+}
+
+.story-meta-value {
+  color: #333;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.story-version-tag {
+  background: #e8f0fe;
+  color: #3c4ab9;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid rgba(60, 74, 185, 0.2);
+}
+
+.story-meta-attachments {
+  width: 100%;
+}
+
+.story-attachments-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.story-attachment-link {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  text-decoration: none;
+  color: #495057;
+  font-size: 12px;
+  transition: all 0.15s ease;
+  max-width: 200px;
+}
+
+.story-attachment-link:hover {
+  background: #e9ecef;
+  border-color: #adb5bd;
+  color: #212529;
+}
+
+.story-attachment-thumb {
+  width: 24px;
+  height: 24px;
+  object-fit: cover;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.story-attachment-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.story-attachment-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .story-meta-fields {
+    flex-direction: column;
+  }
+  .story-meta-col:first-child {
+    padding-right: 0;
+    border-right: none;
+    border-bottom: 1px solid rgba(102, 126, 234, 0.2);
+    padding-bottom: 8px;
+    margin-bottom: 4px;
+  }
+  .story-meta-col:last-child {
+    padding-left: 0;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .story-meta-fields {
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
+    border-color: rgba(102, 126, 234, 0.25);
+  }
+
+  .story-meta-value {
+    color: #e0e0e0;
+  }
+
+  .story-version-tag {
+    background: rgba(60, 74, 185, 0.25);
+    color: #a0b0ff;
+    border-color: rgba(60, 74, 185, 0.4);
+  }
+
+  .story-attachment-link {
+    background: #2d3436;
+    border-color: #4a4a4a;
+    color: #d0d0d0;
+  }
+
+  .story-attachment-link:hover {
+    background: #3d4446;
+    border-color: #667eea;
+  }
+}
+
+/* Meta field edit controls */
+.story-meta-item--editable {
+  width: 100%;
+}
+
+.meta-edit-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #aaa;
+  font-size: 13px;
+  padding: 0 4px;
+  line-height: 1;
+  transition: color 0.15s;
+  vertical-align: middle;
+}
+
+.meta-edit-btn:hover {
+  color: #667eea;
+}
+
+.meta-none {
+  color: #aaa;
+  font-style: italic;
+  font-size: 12px;
+}
+
+.meta-epic-tag {
+  display: inline-block;
+  background: rgba(102, 126, 234, 0.12);
+  color: #4a5fb5;
+  border-radius: 3px;
+  padding: 1px 7px;
+  font-size: 12px;
+  font-weight: 500;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+a.meta-epic-link {
+  text-decoration: none;
+  cursor: pointer;
+}
+
+a.meta-epic-link:hover {
+  text-decoration: underline;
+  color: #0052cc;
+  background: rgba(0, 82, 204, 0.12);
+}
+
+.meta-sprint-active {
+  background: rgba(0, 135, 90, 0.15);
+  color: #006644;
+}
+
+/* Inline edit container */
+.meta-edit-inline {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  max-width: 380px;
+}
+
+.meta-edit-input {
+  padding: 6px 10px;
+  border: 1px solid #667eea;
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+  width: 100%;
+}
+
+.meta-spinner {
+  font-size: 12px;
+  color: #888;
+}
+
+/* User search dropdown */
+.meta-user-dropdown {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  max-height: 200px;
+  overflow-y: auto;
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  z-index: 100;
+}
+
+.meta-user-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.meta-user-option:hover {
+  background: #f0ebff;
+}
+
+.meta-user-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.meta-user-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.meta-user-name {
+  font-weight: 500;
+  color: #222;
+}
+
+.meta-user-email {
+  font-size: 11px;
+  color: #888;
+}
+
+/* Fix versions edit */
+.meta-edit-versions {
+  max-width: 420px;
+}
+
+.meta-versions-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+  padding: 6px;
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+}
+
+.meta-version-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 3px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.meta-version-checkbox:hover {
+  background: #e9ecef;
+}
+
+.meta-version-released {
+  color: #555;
+}
+
+.meta-version-unreleased {
+  color: #3c4ab9;
+  font-weight: 500;
+}
+
+/* Edit action buttons */
+.meta-edit-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.meta-btn-save {
+  padding: 5px 14px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  font-size: 12px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.meta-btn-save:hover {
+  background: #5a6fd6;
+}
+
+.meta-btn-cancel {
+  padding: 5px 14px;
+  background: #f8f9fa;
+  color: #555;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.meta-btn-cancel:hover {
+  background: #e9ecef;
+}
+
+/* Attachment entry with delete */
+.story-attachment-entry {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.meta-attachment-delete {
+  background: none;
+  border: none;
+  color: #ccc;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  line-height: 1;
+  transition: color 0.15s, background 0.15s;
+}
+
+.meta-attachment-delete:hover {
+  color: #dc3545;
+  background: rgba(220,53,69,0.08);
+}
+
+.meta-attachment-upload {
+  margin-top: 4px;
+}
+
+.meta-btn-upload {
+  padding: 5px 12px;
+  background: #f0ebff;
+  color: #667eea;
+  border: 1px dashed #667eea;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+
+.meta-btn-upload:hover:not(:disabled) {
+  background: #e8e0ff;
+}
+
+.meta-btn-upload:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }

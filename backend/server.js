@@ -9,10 +9,28 @@ const {
   getJiraIssueDetails,
   updateJiraAcceptanceCriteria,
   updateJiraStatus,
-  getJiraTransitions
+  getJiraTransitions,
+  getJiraProjectVersions,
+  updateJiraFixVersions,
+  searchJiraUsers,
+  updateJiraAssignee,
+  deleteJiraAttachment,
+  addJiraAttachment,
+  getJiraPriorities,
+  updateJiraPriority,
+  getJiraSquadOptions,
+  updateJiraSquad,
+  getJiraResolutions,
+  updateJiraResolution,
+  getJiraSprints,
+  updateJiraSprint,
+  getJiraEpics,
+  updateJiraEpicLink
 } = require("./jira-api");
 
 const crypto = require("crypto");
+const multer = require("multer");
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200 * 1024 * 1024 } });
 
 const app = express();
 app.use(cors({
@@ -23,10 +41,58 @@ app.use(cors({
   ],
   credentials: true
 }));
+app.use(express.json());
 
 app.get("/", (req, res) => {
   res.send("Server is running");
 });
+
+// Upload attachment to Jira
+app.post("/api/attachment/:roomId/:issueKey", upload.single("file"), async (req, res) => {
+  const { roomId, issueKey } = req.params;
+  const jiraClient = getJiraClientForRoom(roomId);
+
+  if (!jiraClient) {
+    return res.status(400).json({ error: "Jira not configured for this room" });
+  }
+
+  if (!req.file) {
+    return res.status(400).json({ error: "No file provided" });
+  }
+
+  try {
+    const result = await addJiraAttachment(
+      jiraClient, issueKey,
+      req.file.originalname, req.file.buffer, req.file.mimetype
+    );
+    res.json({ attachments: result });
+  } catch (err) {
+    console.error("Failed to upload attachment:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+function buildJiraDetailsPayload(details) {
+  return {
+    summary: details.summary,
+    acceptanceCriteria: details.acceptanceCriteria,
+    description: details.description,
+    issueType: details.issueType,
+    status: details.status || "To Do",
+    fixVersions: details.fixVersions,
+    attachments: details.attachments,
+    reporter: details.reporter,
+    assignee: details.assignee,
+    priority: details.priority,
+    priorityIconUrl: details.priorityIconUrl,
+    resolution: details.resolution,
+    squad: details.squad,
+    squadId: details.squadId,
+    epicLink: details.epicLink,
+    epicLinkKey: details.epicLinkKey,
+    sprints: details.sprints
+  };
+}
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -87,7 +153,8 @@ io.on("connection", (socket) => {
           roomName: rooms[roomId].name,
           users: rooms[roomId].users,
           estimationScale: rooms[roomId].estimationScale,
-          jiraConnected: rooms[roomId].jiraConnected
+          jiraConnected: rooms[roomId].jiraConnected,
+          jiraBaseUrl: process.env.JIRA_URL || null
         });
 
         // Clean up empty rooms after 5 minutes
@@ -195,6 +262,7 @@ io.on("connection", (socket) => {
       users: rooms[roomId].users,
       estimationScale: rooms[roomId].estimationScale,
       jiraConnected: rooms[roomId].jiraConnected,
+      jiraBaseUrl: process.env.JIRA_URL || null,
       stories: rooms[roomId].stories,
       currentStoryIndex: rooms[roomId].currentStoryIndex
     });
@@ -306,6 +374,7 @@ io.on("connection", (socket) => {
         users: rooms[roomId].users,
         estimationScale: rooms[roomId].estimationScale,
         jiraConnected: rooms[roomId].jiraConnected,
+        jiraBaseUrl: process.env.JIRA_URL || null,
         stories: rooms[roomId].stories,
         currentStoryIndex: rooms[roomId].currentStoryIndex
       });
@@ -351,6 +420,7 @@ io.on("connection", (socket) => {
         users: rooms[roomId].users,
         estimationScale: rooms[roomId].estimationScale,
         jiraConnected: rooms[roomId].jiraConnected,
+        jiraBaseUrl: process.env.JIRA_URL || null,
         stories: rooms[roomId].stories,
         currentStoryIndex: rooms[roomId].currentStoryIndex
       });
@@ -373,21 +443,8 @@ io.on("connection", (socket) => {
 
       try {
         const details = await getJiraIssueDetails(jiraClient, jiraKey);
-        rooms[roomId].currentStoryData = {
-          issueTitle: details.summary,
-          acceptanceCriteria: details.acceptanceCriteria,
-          description: details.description,
-          issueType: details.issueType,
-          storyStatus: details.status || "To Do"
-        };
-
-        io.to(roomId).emit("jiraDetails", {
-          summary: details.summary,
-          acceptanceCriteria: details.acceptanceCriteria,
-          description: details.description,
-          issueType: details.issueType,
-          status: details.status || "To Do"
-        });
+        rooms[roomId].currentStoryData = buildJiraDetailsPayload(details);
+        io.to(roomId).emit("jiraDetails", buildJiraDetailsPayload(details));
       } catch (err) {
         console.error("Failed to fetch Jira details:", err.message);
         socket.emit("jiraError", { message: "Failed to fetch Jira details: " + err.message });
@@ -472,13 +529,7 @@ io.on("connection", (socket) => {
             storyStatus: details.status || "To Do"
           };
 
-          io.to(roomId).emit("jiraDetails", {
-            summary: details.summary,
-            acceptanceCriteria: details.acceptanceCriteria,
-            description: details.description,
-            issueType: details.issueType,
-            status: details.status || "To Do"
-          });
+          io.to(roomId).emit("jiraDetails", buildJiraDetailsPayload(details));
         } catch (err) {
           console.error("Failed to update Jira:", err.message);
           socket.emit("jiraError", { message: "Failed to update Jira: " + err.message });
@@ -509,13 +560,7 @@ io.on("connection", (socket) => {
           rooms[roomId].currentStoryData.acceptanceCriteria = acceptanceCriteria;
         }
 
-        io.to(roomId).emit("jiraDetails", {
-          summary: details.summary,
-          acceptanceCriteria: details.acceptanceCriteria,
-          description: details.description,
-          issueType: details.issueType,
-          status: details.status || "To Do"
-        });
+        io.to(roomId).emit("jiraDetails", buildJiraDetailsPayload(details));
       } catch (err) {
         console.error("Failed to update Jira Acceptance Criteria:", err.message);
         socket.emit("jiraError", { message: "Failed to update acceptance criteria" });
@@ -541,13 +586,7 @@ io.on("connection", (socket) => {
           rooms[roomId].currentStoryData.description = description;
         }
 
-        io.to(roomId).emit("jiraDetails", {
-          summary: details.summary,
-          acceptanceCriteria: details.acceptanceCriteria,
-          description: details.description,
-          issueType: details.issueType,
-          status: details.status || "To Do"
-        });
+        io.to(roomId).emit("jiraDetails", buildJiraDetailsPayload(details));
       } catch (err) {
         console.error("Failed to update Jira Description:", err.message);
         socket.emit("jiraError", { message: "Failed to update description" });
@@ -574,13 +613,7 @@ io.on("connection", (socket) => {
         }
 
         io.to(roomId).emit("storyStatusUpdate", { jiraKey, status });
-        io.to(roomId).emit("jiraDetails", {
-          summary: details.summary,
-          acceptanceCriteria: details.acceptanceCriteria,
-          description: details.description,
-          issueType: details.issueType,
-          status: details.status || status
-        });
+        io.to(roomId).emit("jiraDetails", buildJiraDetailsPayload(details));
       } catch (err) {
         console.error("Failed to update Jira Status:", err.message);
         socket.emit("statusUpdateError", {
@@ -608,6 +641,234 @@ io.on("connection", (socket) => {
     } catch (error) {
       console.error('Error getting transitions:', error);
       io.to(roomId).emit("jiraTransitions", { transitions: [] });
+    }
+  });
+
+  // Handle get project versions for fix version picker
+  socket.on("getProjectVersions", async ({ roomId, projectKey }) => {
+    if (!rooms[roomId] || !projectKey) return;
+
+    const jiraClient = getJiraClientForRoom(roomId);
+    if (!jiraClient) {
+      socket.emit("jiraError", { message: "Jira not configured for this room" });
+      return;
+    }
+
+    try {
+      const versions = await getJiraProjectVersions(jiraClient, projectKey);
+      socket.emit("projectVersions", { versions });
+    } catch (err) {
+      console.error("Failed to get project versions:", err.message);
+      socket.emit("projectVersions", { versions: [] });
+    }
+  });
+
+  // Handle update fix versions
+  socket.on("updateFixVersions", async ({ roomId, jiraKey, versionIds }) => {
+    if (!rooms[roomId] || !jiraKey) return;
+
+    const jiraClient = getJiraClientForRoom(roomId);
+    if (!jiraClient) {
+      socket.emit("jiraError", { message: "Jira not configured for this room" });
+      return;
+    }
+
+    try {
+      await updateJiraFixVersions(jiraClient, jiraKey, versionIds);
+      const details = await getJiraIssueDetails(jiraClient, jiraKey);
+
+      if (rooms[roomId].currentStoryData) {
+        rooms[roomId].currentStoryData.fixVersions = details.fixVersions;
+      }
+
+      io.to(roomId).emit("jiraDetails", buildJiraDetailsPayload(details));
+    } catch (err) {
+      console.error("Failed to update fix versions:", err.message);
+      socket.emit("jiraError", { message: "Failed to update fix versions: " + err.message });
+    }
+  });
+
+  // Handle search users
+  socket.on("searchJiraUsers", async ({ roomId, query }) => {
+    if (!rooms[roomId]) return;
+
+    const jiraClient = getJiraClientForRoom(roomId);
+    if (!jiraClient) {
+      socket.emit("jiraUserSearchResults", { users: [] });
+      return;
+    }
+
+    try {
+      const users = await searchJiraUsers(jiraClient, query);
+      socket.emit("jiraUserSearchResults", { users });
+    } catch (err) {
+      console.error("Failed to search users:", err.message);
+      socket.emit("jiraUserSearchResults", { users: [] });
+    }
+  });
+
+  // Handle update assignee
+  socket.on("updateAssignee", async ({ roomId, jiraKey, accountId }) => {
+    if (!rooms[roomId] || !jiraKey) return;
+
+    const jiraClient = getJiraClientForRoom(roomId);
+    if (!jiraClient) {
+      socket.emit("jiraError", { message: "Jira not configured for this room" });
+      return;
+    }
+
+    try {
+      await updateJiraAssignee(jiraClient, jiraKey, accountId);
+      const details = await getJiraIssueDetails(jiraClient, jiraKey);
+
+      if (rooms[roomId].currentStoryData) {
+        rooms[roomId].currentStoryData.assignee = details.assignee;
+      }
+
+      io.to(roomId).emit("jiraDetails", buildJiraDetailsPayload(details));
+    } catch (err) {
+      console.error("Failed to update assignee:", err.message);
+      socket.emit("jiraError", { message: "Failed to update assignee: " + err.message });
+    }
+  });
+
+  // Handle delete attachment
+  socket.on("deleteAttachment", async ({ roomId, jiraKey, attachmentId }) => {
+    if (!rooms[roomId] || !jiraKey || !attachmentId) return;
+
+    const jiraClient = getJiraClientForRoom(roomId);
+    if (!jiraClient) {
+      socket.emit("jiraError", { message: "Jira not configured for this room" });
+      return;
+    }
+
+    try {
+      await deleteJiraAttachment(jiraClient, attachmentId);
+      const details = await getJiraIssueDetails(jiraClient, jiraKey);
+
+      if (rooms[roomId].currentStoryData) {
+        rooms[roomId].currentStoryData.attachments = details.attachments;
+      }
+
+      io.to(roomId).emit("jiraDetails", buildJiraDetailsPayload(details));
+    } catch (err) {
+      console.error("Failed to delete attachment:", err.message);
+      socket.emit("jiraError", { message: "Failed to delete attachment: " + err.message });
+    }
+  });
+
+  // Handle get priorities
+  socket.on("getPriorities", async ({ roomId }) => {
+    if (!rooms[roomId]) return;
+    const jiraClient = getJiraClientForRoom(roomId);
+    if (!jiraClient) { socket.emit("priorities", { priorities: [] }); return; }
+    const priorities = await getJiraPriorities(jiraClient);
+    socket.emit("priorities", { priorities });
+  });
+
+  // Handle update priority
+  socket.on("updatePriority", async ({ roomId, jiraKey, priorityName }) => {
+    if (!rooms[roomId] || !jiraKey) return;
+    const jiraClient = getJiraClientForRoom(roomId);
+    if (!jiraClient) { socket.emit("jiraError", { message: "Jira not configured" }); return; }
+    try {
+      await updateJiraPriority(jiraClient, jiraKey, priorityName);
+      const details = await getJiraIssueDetails(jiraClient, jiraKey);
+      io.to(roomId).emit("jiraDetails", buildJiraDetailsPayload(details));
+    } catch (err) {
+      socket.emit("jiraError", { message: "Failed to update priority: " + err.message });
+    }
+  });
+
+  // Handle get squad options
+  socket.on("getSquadOptions", async ({ roomId, jiraKey }) => {
+    if (!rooms[roomId] || !jiraKey) return;
+    const jiraClient = getJiraClientForRoom(roomId);
+    if (!jiraClient) { socket.emit("squadOptions", { options: [] }); return; }
+    const options = await getJiraSquadOptions(jiraClient, jiraKey);
+    socket.emit("squadOptions", { options });
+  });
+
+  // Handle update squad
+  socket.on("updateSquad", async ({ roomId, jiraKey, squadId }) => {
+    if (!rooms[roomId] || !jiraKey) return;
+    const jiraClient = getJiraClientForRoom(roomId);
+    if (!jiraClient) { socket.emit("jiraError", { message: "Jira not configured" }); return; }
+    try {
+      await updateJiraSquad(jiraClient, jiraKey, squadId);
+      const details = await getJiraIssueDetails(jiraClient, jiraKey);
+      io.to(roomId).emit("jiraDetails", buildJiraDetailsPayload(details));
+    } catch (err) {
+      socket.emit("jiraError", { message: "Failed to update squad: " + err.message });
+    }
+  });
+
+  // Handle get resolutions
+  socket.on("getResolutions", async ({ roomId }) => {
+    if (!rooms[roomId]) return;
+    const jiraClient = getJiraClientForRoom(roomId);
+    if (!jiraClient) { socket.emit("resolutions", { resolutions: [] }); return; }
+    const resolutions = await getJiraResolutions(jiraClient);
+    socket.emit("resolutions", { resolutions });
+  });
+
+  // Handle update resolution
+  socket.on("updateResolution", async ({ roomId, jiraKey, resolutionName }) => {
+    if (!rooms[roomId] || !jiraKey) return;
+    const jiraClient = getJiraClientForRoom(roomId);
+    if (!jiraClient) { socket.emit("jiraError", { message: "Jira not configured" }); return; }
+    try {
+      await updateJiraResolution(jiraClient, jiraKey, resolutionName);
+      const details = await getJiraIssueDetails(jiraClient, jiraKey);
+      io.to(roomId).emit("jiraDetails", buildJiraDetailsPayload(details));
+    } catch (err) {
+      socket.emit("jiraError", { message: "Failed to update resolution: " + err.message });
+    }
+  });
+
+  // Handle get sprints
+  socket.on("getSprints", async ({ roomId, projectKey }) => {
+    if (!rooms[roomId] || !projectKey) return;
+    const jiraClient = getJiraClientForRoom(roomId);
+    if (!jiraClient) { socket.emit("sprints", { sprints: [] }); return; }
+    const sprints = await getJiraSprints(jiraClient, projectKey);
+    socket.emit("sprints", { sprints });
+  });
+
+  // Handle update sprint
+  socket.on("updateSprint", async ({ roomId, jiraKey, sprintId }) => {
+    if (!rooms[roomId] || !jiraKey) return;
+    const jiraClient = getJiraClientForRoom(roomId);
+    if (!jiraClient) { socket.emit("jiraError", { message: "Jira not configured" }); return; }
+    try {
+      await updateJiraSprint(jiraClient, jiraKey, sprintId);
+      const details = await getJiraIssueDetails(jiraClient, jiraKey);
+      io.to(roomId).emit("jiraDetails", buildJiraDetailsPayload(details));
+    } catch (err) {
+      socket.emit("jiraError", { message: "Failed to update sprint: " + err.message });
+    }
+  });
+
+  // Handle get epics
+  socket.on("getEpics", async ({ roomId, projectKey }) => {
+    if (!rooms[roomId] || !projectKey) return;
+    const jiraClient = getJiraClientForRoom(roomId);
+    if (!jiraClient) { socket.emit("epics", { epics: [] }); return; }
+    const epics = await getJiraEpics(jiraClient, projectKey);
+    socket.emit("epics", { epics });
+  });
+
+  // Handle update epic link
+  socket.on("updateEpicLink", async ({ roomId, jiraKey, epicKey }) => {
+    if (!rooms[roomId] || !jiraKey) return;
+    const jiraClient = getJiraClientForRoom(roomId);
+    if (!jiraClient) { socket.emit("jiraError", { message: "Jira not configured" }); return; }
+    try {
+      await updateJiraEpicLink(jiraClient, jiraKey, epicKey);
+      const details = await getJiraIssueDetails(jiraClient, jiraKey);
+      io.to(roomId).emit("jiraDetails", buildJiraDetailsPayload(details));
+    } catch (err) {
+      socket.emit("jiraError", { message: "Failed to update epic link: " + err.message });
     }
   });
 
@@ -681,6 +942,7 @@ io.on("connection", (socket) => {
         users: rooms[roomId].users,
         estimationScale: rooms[roomId].estimationScale,
         jiraConnected: rooms[roomId].jiraConnected,
+        jiraBaseUrl: process.env.JIRA_URL || null,
         stories: rooms[roomId].stories,
         currentStoryIndex: rooms[roomId].currentStoryIndex
       });
@@ -695,6 +957,7 @@ io.on("connection", (socket) => {
         users: rooms[roomId].users,
         estimationScale: rooms[roomId].estimationScale,
         jiraConnected: rooms[roomId].jiraConnected,
+        jiraBaseUrl: process.env.JIRA_URL || null,
         stories: rooms[roomId].stories,
         currentStoryIndex: rooms[roomId].currentStoryIndex
       });

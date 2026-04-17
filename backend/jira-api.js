@@ -247,6 +247,15 @@ async function getJiraIssueDetails(jiraClient, issueKey) {
           "description",
           "status",
           "issuetype",
+          "fixVersions",
+          "attachment",
+          "reporter",
+          "assignee",
+          "priority",
+          "resolution",
+          process.env.JIRA_SQUAD_FIELD || "customfield_18030",
+          process.env.JIRA_EPIC_LINK_FIELD || "customfield_11731",
+          process.env.JIRA_SPRINT_FIELD || "customfield_11730",
           process.env.JIRA_ACCEPTANCE_CRITERIA_FIELD,
           process.env.JIRA_DESCRIPTION_FIELD
         ].filter(Boolean).join(",")
@@ -264,12 +273,66 @@ async function getJiraIssueDetails(jiraClient, issueKey) {
     const acceptanceCriteria =
       issue.fields[process.env.JIRA_ACCEPTANCE_CRITERIA_FIELD];
 
+    const fixVersions = (issue.fields.fixVersions || []).map(v => v.name);
+
+    const attachments = (issue.fields.attachment || []).map(a => ({
+      id: a.id,
+      filename: a.filename,
+      mimeType: a.mimeType,
+      size: a.size,
+      content: a.content,
+      thumbnail: a.thumbnail
+    }));
+
+    const squadField = process.env.JIRA_SQUAD_FIELD || "customfield_18030";
+    const epicLinkField = process.env.JIRA_EPIC_LINK_FIELD || "customfield_11731";
+    const sprintField = process.env.JIRA_SPRINT_FIELD || "customfield_11730";
+
+    // Sprint field can be array or single value; each entry may be an object or
+    // a Jira Server string like "com.atlassian...Sprint@x[id=77,name=Foo,state=ACTIVE,...]"
+    const sprintRaw = issue.fields[sprintField];
+    const parseSprintEntry = (s) => {
+      if (s && typeof s === 'object') return { id: s.id, name: s.name, state: (s.state || '').toLowerCase() };
+      if (typeof s === 'string') {
+        const id = (s.match(/\bid=(\d+)/) || [])[1];
+        const name = (s.match(/\bname=([^,\]]+)/) || [])[1];
+        const state = ((s.match(/\bstate=([^,\]]+)/) || [])[1] || '').toLowerCase();
+        if (name) return { id: id ? parseInt(id) : null, name, state };
+      }
+      return null;
+    };
+    const sprintArr = Array.isArray(sprintRaw) ? sprintRaw : (sprintRaw ? [sprintRaw] : []);
+    const sprints = sprintArr.map(parseSprintEntry).filter(Boolean);
+
+    const epicLinkKey = issue.fields[epicLinkField] || null;
+    let epicLinkName = epicLinkKey;
+    if (epicLinkKey) {
+      try {
+        const epicRes = await jiraClient.get(`/rest/api/2/issue/${epicLinkKey}`, { params: { fields: 'summary' } });
+        epicLinkName = epicRes.data.fields?.summary || epicLinkKey;
+      } catch (_) {}
+    }
+
     return {
       summary: issue.fields.summary,
       acceptanceCriteria,
       description: desc,
       issueType: issue.fields.issuetype?.name,
-      status: issue.fields.status?.name || "To Do"
+      status: issue.fields.status?.name || "To Do",
+      fixVersions,
+      attachments,
+      reporter: issue.fields.reporter?.displayName || null,
+      reporterAccountId: issue.fields.reporter?.name || issue.fields.reporter?.accountId || null,
+      assignee: issue.fields.assignee?.displayName || null,
+      assigneeAccountId: issue.fields.assignee?.name || issue.fields.assignee?.accountId || null,
+      priority: issue.fields.priority?.name || null,
+      priorityIconUrl: issue.fields.priority?.iconUrl || null,
+      resolution: issue.fields.resolution?.name || null,
+      squad: issue.fields[squadField]?.value || null,
+      squadId: issue.fields[squadField]?.id || null,
+      epicLink: epicLinkName,
+      epicLinkKey,
+      sprints
     };
 
   } catch (err) {
@@ -324,6 +387,271 @@ async function updateJiraStatus(jiraClient, issueKey, targetStatus) {
 }
 
 // =========================
+// 🔹 GET PRIORITIES
+// =========================
+async function getJiraPriorities(jiraClient) {
+  if (!jiraClient) return [];
+  try {
+    const res = await jiraClient.get('/rest/api/2/priority');
+    return (res.data || []).map(p => ({ id: p.id, name: p.name, iconUrl: p.iconUrl }));
+  } catch (err) {
+    console.error("Failed to fetch priorities:", err.message);
+    return [];
+  }
+}
+
+// =========================
+// 🔹 UPDATE PRIORITY
+// =========================
+async function updateJiraPriority(jiraClient, issueKey, priorityName) {
+  if (!jiraClient) throw new Error("Jira client not initialized");
+  const payload = { fields: { priority: { name: priorityName } } };
+  await jiraClient.put(`/rest/api/2/issue/${issueKey}`, payload);
+  console.log(`✅ Updated ${issueKey} priority to ${priorityName}`);
+}
+
+// =========================
+// 🔹 GET SQUAD OPTIONS
+// =========================
+async function getJiraSquadOptions(jiraClient, issueKey) {
+  if (!jiraClient) return [];
+  const squadField = process.env.JIRA_SQUAD_FIELD || "customfield_18030";
+  try {
+    const res = await jiraClient.get(`/rest/api/2/issue/${issueKey}/editmeta`);
+    const field = res.data?.fields?.[squadField];
+    return (field?.allowedValues || []).map(v => ({ id: v.id, value: v.value }));
+  } catch (err) {
+    console.error("Failed to fetch squad options:", err.message);
+    return [];
+  }
+}
+
+// =========================
+// 🔹 UPDATE SQUAD
+// =========================
+async function updateJiraSquad(jiraClient, issueKey, squadId) {
+  if (!jiraClient) throw new Error("Jira client not initialized");
+  const squadField = process.env.JIRA_SQUAD_FIELD || "customfield_18030";
+  const payload = { fields: { [squadField]: { id: squadId } } };
+  await jiraClient.put(`/rest/api/2/issue/${issueKey}`, payload);
+  console.log(`✅ Updated ${issueKey} squad to ${squadId}`);
+}
+
+// =========================
+// 🔹 GET RESOLUTIONS
+// =========================
+async function getJiraResolutions(jiraClient) {
+  if (!jiraClient) return [];
+  try {
+    const res = await jiraClient.get('/rest/api/2/resolution');
+    return (res.data || []).map(r => ({ id: r.id, name: r.name }));
+  } catch (err) {
+    console.error("Failed to fetch resolutions:", err.message);
+    return [];
+  }
+}
+
+// =========================
+// 🔹 UPDATE RESOLUTION
+// =========================
+async function updateJiraResolution(jiraClient, issueKey, resolutionName) {
+  if (!jiraClient) throw new Error("Jira client not initialized");
+  const payload = { fields: { resolution: { name: resolutionName } } };
+  await jiraClient.put(`/rest/api/2/issue/${issueKey}`, payload);
+  console.log(`✅ Updated ${issueKey} resolution to ${resolutionName}`);
+}
+
+// =========================
+// 🔹 GET SPRINTS FOR PROJECT
+// =========================
+async function getJiraSprints(jiraClient, projectKey) {
+  if (!jiraClient) return [];
+  try {
+    const boardsRes = await jiraClient.get('/rest/agile/1.0/board', {
+      params: { projectKeyOrId: projectKey, maxResults: 50 }
+    });
+    const boards = boardsRes.data?.values || [];
+    if (!boards.length) return [];
+
+    // Collect sprints from all boards, deduplicate by id
+    const sprintMap = new Map();
+    await Promise.all(boards.map(async board => {
+      try {
+        const sprintsRes = await jiraClient.get(`/rest/agile/1.0/board/${board.id}/sprint`, {
+          params: { state: 'active,future', maxResults: 50 }
+        });
+        for (const s of (sprintsRes.data?.values || [])) {
+          if (!sprintMap.has(s.id)) {
+            sprintMap.set(s.id, { id: s.id, name: s.name, state: s.state });
+          }
+        }
+      } catch (_) {}
+    }));
+
+    // Sort: active first, then by id descending (most recent first)
+    return [...sprintMap.values()].sort((a, b) => {
+      if (a.state === 'active' && b.state !== 'active') return -1;
+      if (b.state === 'active' && a.state !== 'active') return 1;
+      return b.id - a.id;
+    });
+  } catch (err) {
+    console.error("Failed to fetch sprints:", err.message);
+    return [];
+  }
+}
+
+// =========================
+// 🔹 UPDATE SPRINT
+// =========================
+async function updateJiraSprint(jiraClient, issueKey, sprintId) {
+  if (!jiraClient) throw new Error("Jira client not initialized");
+  const sprintField = process.env.JIRA_SPRINT_FIELD || "customfield_11730";
+  const payload = { fields: { [sprintField]: sprintId } };
+  await jiraClient.put(`/rest/api/2/issue/${issueKey}`, payload);
+  console.log(`✅ Updated ${issueKey} sprint to ${sprintId}`);
+}
+
+// =========================
+// 🔹 GET EPICS FOR PROJECT
+// =========================
+async function getJiraEpics(jiraClient, projectKey) {
+  if (!jiraClient) return [];
+  try {
+    const res = await jiraClient.get('/rest/agile/1.0/board', {
+      params: { projectKeyOrId: projectKey, maxResults: 5 }
+    });
+    const boards = res.data?.values || [];
+    if (!boards.length) return [];
+
+    const boardId = boards[0].id;
+    const epicsRes = await jiraClient.get(`/rest/agile/1.0/board/${boardId}/epic`, {
+      params: { done: false, maxResults: 50 }
+    });
+    return (epicsRes.data?.values || []).map(e => ({ id: e.id, key: e.key, name: e.name || e.summary }));
+  } catch (err) {
+    console.error("Failed to fetch epics:", err.message);
+    return [];
+  }
+}
+
+// =========================
+// 🔹 UPDATE EPIC LINK
+// =========================
+async function updateJiraEpicLink(jiraClient, issueKey, epicKey) {
+  if (!jiraClient) throw new Error("Jira client not initialized");
+  const epicLinkField = process.env.JIRA_EPIC_LINK_FIELD || "customfield_11731";
+  const payload = { fields: { [epicLinkField]: epicKey || null } };
+  await jiraClient.put(`/rest/api/2/issue/${issueKey}`, payload);
+  console.log(`✅ Updated ${issueKey} epic link to ${epicKey}`);
+}
+
+// =========================
+// 🔹 GET PROJECT VERSIONS
+// =========================
+async function getJiraProjectVersions(jiraClient, projectKey) {
+  if (!jiraClient) return [];
+
+  try {
+    const res = await jiraClient.get(`/rest/api/2/project/${projectKey}/versions`);
+    return res.data.map(v => ({ id: v.id, name: v.name, released: v.released, archived: v.archived }));
+  } catch (err) {
+    console.error("Failed to fetch project versions:", err.message);
+    return [];
+  }
+}
+
+// =========================
+// 🔹 UPDATE FIX VERSIONS
+// =========================
+async function updateJiraFixVersions(jiraClient, issueKey, versionIds) {
+  if (!jiraClient) throw new Error("Jira client not initialized");
+
+  const payload = {
+    fields: {
+      fixVersions: versionIds.map(id => ({ id }))
+    }
+  };
+
+  console.log(`Updating ${issueKey} fixVersions to:`, versionIds);
+  const res = await jiraClient.put(`/rest/api/2/issue/${issueKey}`, payload);
+
+  if (res.status === 204) {
+    console.log(`✅ Successfully updated ${issueKey} fixVersions`);
+  }
+
+  return res.data;
+}
+
+// =========================
+// 🔹 SEARCH USERS
+// =========================
+async function searchJiraUsers(jiraClient, query, projectKey) {
+  if (!jiraClient) return [];
+
+  try {
+    const res = await jiraClient.get(`/rest/api/2/user/search`, {
+      params: { username: query, query, maxResults: 20 }
+    });
+    return (res.data || []).map(u => ({
+      accountId: u.name || u.accountId,
+      displayName: u.displayName,
+      emailAddress: u.emailAddress,
+      avatarUrl: u.avatarUrls?.['24x24']
+    }));
+  } catch (err) {
+    console.error("Failed to search users:", err.message);
+    return [];
+  }
+}
+
+// =========================
+// 🔹 UPDATE ASSIGNEE
+// =========================
+async function updateJiraAssignee(jiraClient, issueKey, accountId) {
+  if (!jiraClient) throw new Error("Jira client not initialized");
+
+  const payload = { name: accountId };
+
+  console.log(`Updating ${issueKey} assignee to:`, accountId);
+  await jiraClient.put(`/rest/api/2/issue/${issueKey}/assignee`, payload);
+  console.log(`✅ Successfully updated ${issueKey} assignee`);
+}
+
+// =========================
+// 🔹 DELETE ATTACHMENT
+// =========================
+async function deleteJiraAttachment(jiraClient, attachmentId) {
+  if (!jiraClient) throw new Error("Jira client not initialized");
+
+  console.log(`Deleting attachment ${attachmentId}`);
+  await jiraClient.delete(`/rest/api/2/attachment/${attachmentId}`);
+  console.log(`✅ Successfully deleted attachment ${attachmentId}`);
+}
+
+// =========================
+// 🔹 ADD ATTACHMENT
+// =========================
+async function addJiraAttachment(jiraClient, issueKey, filename, fileBuffer, mimeType) {
+  if (!jiraClient) throw new Error("Jira client not initialized");
+
+  const FormData = require("form-data");
+  const form = new FormData();
+  form.append("file", fileBuffer, { filename, contentType: mimeType });
+
+  console.log(`Uploading attachment ${filename} to ${issueKey}`);
+
+  const res = await jiraClient.post(`/rest/api/2/issue/${issueKey}/attachments`, form, {
+    headers: {
+      ...form.getHeaders(),
+      "X-Atlassian-Token": "no-check"
+    }
+  });
+
+  console.log(`✅ Successfully uploaded attachment to ${issueKey}`);
+  return res.data;
+}
+
+// =========================
 // 🔹 EXPORTS
 // =========================
 module.exports = {
@@ -337,5 +665,21 @@ module.exports = {
   getJiraTransitions,
   transitionJiraIssue,
   getTransitionIdForStatus,
-  testJiraConnection
+  testJiraConnection,
+  getJiraProjectVersions,
+  updateJiraFixVersions,
+  searchJiraUsers,
+  updateJiraAssignee,
+  deleteJiraAttachment,
+  addJiraAttachment,
+  getJiraPriorities,
+  updateJiraPriority,
+  getJiraSquadOptions,
+  updateJiraSquad,
+  getJiraResolutions,
+  updateJiraResolution,
+  getJiraSprints,
+  updateJiraSprint,
+  getJiraEpics,
+  updateJiraEpicLink
 };
