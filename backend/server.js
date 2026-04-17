@@ -300,6 +300,10 @@ io.on("connection", (socket) => {
 
   // Handle join room
   socket.on("join-room", ({ userName, roomId, adminSecret, userIcon }) => {
+    if (!userName || !userName.trim()) {
+      console.log(`Rejected join-room with empty userName for room ${roomId}`);
+      return;
+    }
     roomId = roomId.toUpperCase();
     console.log(`Join-room attempt: ${userName} trying to join ${roomId}`);
 

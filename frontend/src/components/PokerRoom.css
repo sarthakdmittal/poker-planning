@@ -135,27 +135,28 @@
 
 .participants-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
   gap: 12px;
 }
 
 .participant-card {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
+  gap: 8px;
+  padding: 16px 12px 12px;
   background: #f8f9fa;
-  border-radius: 40px;
+  border-radius: 16px;
   border: 2px solid transparent;
   transition: all 0.2s ease;
   position: relative;
-  cursor: pointer;
-  padding-right: 40px;
+  cursor: default;
+  text-align: center;
 }
 
 .participant-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
 }
 
 .participant-card.voted {
@@ -164,53 +165,70 @@
 }
 
 .participant-card.observer {
-  background: #f0ebff;
-  border-color: #6c5ce7;
+  background: #f5f0ff;
+  border-color: #a78bfa;
 }
 
 .participant-card.observer .participant-avatar {
-  opacity: 0.8;
+  opacity: 0.85;
 }
 
 .participant-card.observing {
   border-color: #6c5ce7;
   background: #f0ebff;
-  box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.2);
+  box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.15);
 }
 
 .participant-card.current-user {
-  border-color: #28a745;
-  background: #f0fff4;
+  border-color: #667eea;
+  background: linear-gradient(135deg, #f5f6ff, #eef0ff);
+}
+
+/* Badges row (crown + check) */
+.participant-card__badges {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
 }
 
 .participant-avatar {
-  width: 32px;
-  height: 32px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
-  font-weight: 600;
-  font-size: 14px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  font-weight: 700;
+  font-size: 18px;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
   position: relative;
+  flex-shrink: 0;
 }
 
 .participant-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: #495057;
-  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: #344563;
+  width: 100%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+/* Action buttons row at bottom of card */
+.participant-card__actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+}
+
 .vote-check {
   color: #28a745;
-  font-size: 14px;
-  margin-left: auto;
+  font-size: 13px;
 }
 
 /* Observer Toggle Button */
@@ -831,31 +849,35 @@
 
 .votes-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   gap: 12px;
-  margin-bottom: 32px;
+  margin-bottom: 28px;
 }
 
 .vote-item {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
+  gap: 8px;
+  padding: 16px 10px 12px;
   background: #f8f9fa;
-  border-radius: 40px;
+  border-radius: 16px;
+  border: 2px solid #e9ecef;
   transition: all 0.2s ease;
   position: relative;
+  text-align: center;
 }
 
 .vote-item:hover {
-  transform: translateX(4px);
-  background: #e9ecef;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+  border-color: #dee2e6;
 }
 
 .vote-item.observed-vote-item {
-  border: 3px solid #6c5ce7;
-  background: #f0ebff;
-  transform: scale(1.02);
+  border-color: #6c5ce7;
+  background: #f5f0ff;
+  box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.15);
 }
 
 .voter-info {
@@ -866,22 +888,24 @@
 }
 
 .voter-avatar {
-  width: 32px;
-  height: 32px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
-  font-weight: 600;
-  font-size: 12px;
+  font-weight: 700;
+  font-size: 18px;
   position: relative;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
+  flex-shrink: 0;
 }
 
 .voter-observer-icon {
   position: absolute;
-  top: -4px;
-  right: -4px;
+  top: -3px;
+  right: -3px;
   background: #6c5ce7;
   color: white;
   font-size: 8px;
@@ -891,20 +915,26 @@
 }
 
 .voter-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: #495057;
+  font-size: 12px;
+  font-weight: 600;
+  color: #344563;
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .vote-value {
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 22px;
+  font-weight: 800;
   color: #667eea;
   background: white;
-  padding: 4px 12px;
-  border-radius: 30px;
-  min-width: 40px;
+  border: 2px solid #e0e4ff;
+  border-radius: 12px;
+  padding: 4px 14px;
+  min-width: 48px;
   text-align: center;
+  line-height: 1.4;
 }
 
 .observed-eye {

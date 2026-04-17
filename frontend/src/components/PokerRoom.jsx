@@ -841,7 +841,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
       socket.emit("getRoomInfo", { roomId });
 
       // Also try to join if not already in room
-      socket.emit("join-room", {
+      if (name && name.trim()) socket.emit("join-room", {
         userName: name,
         roomId: roomId,
         adminSecret: localStorage.getItem(`adminSecret_${roomId}`) || undefined
@@ -922,8 +922,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
         setIsReconnecting(false);
       } else {
         console.log("User not in room yet, trying to re-join");
-        // Try to re-join if not in room
-        socket.emit("join-room", {
+        if (name && name.trim()) socket.emit("join-room", {
           userName: name,
           roomId: roomId,
           adminSecret: localStorage.getItem(`adminSecret_${roomId}`) || undefined
@@ -1445,8 +1444,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
 
     const handleReconnect = () => {
       console.log("Socket reconnected, re-joining room:", roomId);
-      // Re-join the room
-      socket.emit("join-room", {
+      if (name && name.trim()) socket.emit("join-room", {
         userName: name,
         roomId: roomId,
         adminSecret: localStorage.getItem(`adminSecret_${roomId}`) || undefined
@@ -2131,41 +2129,47 @@ export default function PokerRoom({ name, onLeaveRoom }) {
                     ${isCurrentUser ? 'current-user' : ''}
                   `}
                     >
+                      {/* Top-right badges */}
+                      <div className="participant-card__badges">
+                        {userName === adminName && <span className="admin-crown" title="Room Admin">👑</span>}
+                        {hasVoted && !isObserver && <FaCheck className="vote-check" />}
+                      </div>
+
+                      {/* Avatar */}
                       <div
                           className={`participant-avatar${userIcons[userId] ? ' has-icon' : ''}${isImageUrl(userIcons[userId]) ? ' has-img' : ''}`}
                           style={userIcons[userId] ? {} : { backgroundColor }}
-                        >
-                          {isImageUrl(userIcons[userId])
-                            ? <img src={userIcons[userId]} alt={userName} className="avatar-img-display" />
-                            : (userIcons[userId] || getInitials(userName))}
-                          {isObserver && <FaUserSecret className="observer-icon" />}
-                        </div>
-                      <span className="participant-name">{userName}</span>
-                      {userName === adminName && (
-                          <span className="admin-crown" title="Room Admin">👑</span>
-                      )}
+                      >
+                        {isImageUrl(userIcons[userId])
+                          ? <img src={userIcons[userId]} alt={userName} className="avatar-img-display" />
+                          : (userIcons[userId] || getInitials(userName))}
+                        {isObserver && <FaUserSecret className="observer-icon" />}
+                      </div>
 
-                      {isAdmin && (
-                          <button
-                              className={`observer-toggle-btn ${isObserver ? 'active' : ''}`}
-                              onClick={() => toggleObserver(userId)}
-                              title={isObserver ? "Remove observer rights" : "Make observer"}
-                          >
-                            <FaEye />
-                          </button>
-                      )}
+                      {/* Name */}
+                      <span className="participant-name" title={userName}>{userName}</span>
 
-                      {isCurrentUserObserver && !isCurrentUser && (
-                          <button
-                              className={`observe-btn ${isObserving ? 'active' : ''}`}
-                              onClick={() => observeUser(userId)}
-                              title={`Observe ${userName}'s view`}
-                          >
-                            <FaEye />
-                          </button>
-                      )}
-
-                      {hasVoted && !isObserver && <FaCheck className="vote-check" />}
+                      {/* Action buttons */}
+                      <div className="participant-card__actions">
+                        {isAdmin && (
+                            <button
+                                className={`observer-toggle-btn ${isObserver ? 'active' : ''}`}
+                                onClick={() => toggleObserver(userId)}
+                                title={isObserver ? "Remove observer rights" : "Make observer"}
+                            >
+                              <FaEye />
+                            </button>
+                        )}
+                        {isCurrentUserObserver && !isCurrentUser && (
+                            <button
+                                className={`observe-btn ${isObserving ? 'active' : ''}`}
+                                onClick={() => observeUser(userId)}
+                                title={`Observe ${userName}'s view`}
+                            >
+                              <FaEye />
+                            </button>
+                        )}
+                      </div>
                     </div>
                 );
               })}
@@ -3006,25 +3010,29 @@ export default function PokerRoom({ name, onLeaveRoom }) {
                 )}
 
                 <div className="votes-grid">
-                  {Object.entries(results.votes).map(([id, vote]) => {
+                  {Object.entries(results.votes)
+                    .sort(([, a], [, b]) => {
+                      const na = parseFloat(a), nb = parseFloat(b);
+                      if (!isNaN(na) && !isNaN(nb)) return na - nb;
+                      return String(a).localeCompare(String(b));
+                    })
+                    .map(([id, vote]) => {
                     const isObservedUser = observingTarget === id;
                     return (
                         <div
                             key={id}
                             className={`vote-item ${isObservedUser ? 'observed-vote-item' : ''}`}
                         >
-                          <div className="voter-info">
-                            <div
-                                className={`voter-avatar${userIcons[id] ? ' has-icon' : ''}${isImageUrl(userIcons[id]) ? ' has-img' : ''}`}
-                                style={userIcons[id] ? {} : { backgroundColor: getAvatarColor(results.users[id]) }}
-                              >
-                                {isImageUrl(userIcons[id])
-                                  ? <img src={userIcons[id]} alt={results.users[id]} className="avatar-img-display" />
-                                  : (userIcons[id] || getInitials(results.users[id]))}
-                                {observers[id] && <FaUserSecret className="voter-observer-icon" />}
-                              </div>
-                            <span className="voter-name">{results.users[id]}</span>
+                          <div
+                              className={`voter-avatar${userIcons[id] ? ' has-icon' : ''}${isImageUrl(userIcons[id]) ? ' has-img' : ''}`}
+                              style={userIcons[id] ? {} : { backgroundColor: getAvatarColor(results.users[id]) }}
+                          >
+                            {isImageUrl(userIcons[id])
+                              ? <img src={userIcons[id]} alt={results.users[id]} className="avatar-img-display" />
+                              : (userIcons[id] || getInitials(results.users[id]))}
+                            {observers[id] && <FaUserSecret className="voter-observer-icon" />}
                           </div>
+                          <span className="voter-name" title={results.users[id]}>{results.users[id]}</span>
                           <span className="vote-value">{vote}</span>
                           {isObservedUser && <FaEye className="observed-eye" />}
                         </div>
