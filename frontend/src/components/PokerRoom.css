@@ -1514,53 +1514,265 @@
   opacity: 0.9;
 }
 
-/* Celebration Enhancement */
-.celebration {
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+/* ══════════════════════════════════════════
+   Perfect Agreement Hero — full redesign
+   ══════════════════════════════════════════ */
+
+/* Outer wrapper: produces the spinning rainbow border */
+.perfect-agreement-outer {
+  position: relative;
   border-radius: 30px;
-  padding: 25px;
+  padding: 3px;
   margin-bottom: 24px;
+  overflow: hidden;
+  animation: paEntrance 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  box-shadow: 0 20px 60px rgba(45, 27, 107, 0.55), 0 0 80px rgba(102, 126, 234, 0.18);
+}
+
+/* The conic-gradient sits on the outer div and the inner card masks it */
+.perfect-agreement-outer::before {
+  content: '';
+  position: absolute;
+  inset: -50%;
+  background: conic-gradient(#ff6ec4, #7873f5, #4adede, #00d2ff, #a8edea, #ffd700, #ff6ec4);
+  animation: paBorderSpin 3s linear infinite;
+  z-index: 0;
+}
+
+.perfect-agreement-hero {
+  position: relative;
+  background: linear-gradient(140deg, #1a1040 0%, #2d1b6b 40%, #1a2980 100%);
+  border-radius: 28px;
+  padding: 36px 28px 28px;
   text-align: center;
-  animation: celebrationPulse 2s infinite;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  color: white;
+  overflow: hidden;
+  z-index: 1;
 }
 
-@keyframes celebrationPulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.02); }
+/* floating orbs */
+.perfect-agreement-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 15% 25%, rgba(120, 115, 245, 0.38) 0%, transparent 45%),
+    radial-gradient(circle at 85% 75%, rgba(74, 222, 222, 0.22) 0%, transparent 45%),
+    radial-gradient(circle at 50% 50%, rgba(255, 110, 196, 0.12) 0%, transparent 60%);
+  animation: paOrbFloat 5s ease-in-out infinite alternate;
+  pointer-events: none;
+  z-index: 0;
 }
 
-.party-poppers {
-  font-size: 2.5rem;
-  margin-bottom: 10px;
-  animation: bounce 1s infinite;
+@keyframes paBorderSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }
 
-@keyframes bounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
+@keyframes paEntrance {
+  from { opacity: 0; transform: scale(0.82) translateY(24px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
 }
 
-.celebration-text {
-  font-size: 1.5rem;
+@keyframes paOrbFloat {
+  from { opacity: 0.7; transform: scale(1) translateX(0); }
+  to   { opacity: 1;   transform: scale(1.07) translateX(10px); }
+}
+
+/* All direct content children float above the orb pseudo */
+.pa-value-wrap,
+.pa-title-row,
+.pa-footer,
+.pa-confetti-field {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Giant value display ── */
+.pa-value-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+.pa-value {
+  font-size: 6rem;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -4px;
+  /* rainbow text */
+  background: linear-gradient(135deg, #fff 0%, #c8b8ff 40%, #7af9ff 80%, #fff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  background-size: 200% 200%;
+  animation: paValueShine 2.5s ease-in-out infinite, paValuePop 0.5s 0.1s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  /* glow beneath number */
+  filter: drop-shadow(0 0 16px rgba(130, 120, 255, 0.7));
+  display: inline-block;
+}
+
+@keyframes paValueShine {
+  0%, 100% { background-position: 0% 50%; }
+  50%       { background-position: 100% 50%; }
+}
+
+@keyframes paValuePop {
+  from { opacity: 0; transform: scale(0.5); filter: blur(8px); }
+  to   { opacity: 1; transform: scale(1);   filter: none; }
+}
+
+.pa-value-label {
+  font-size: 0.8rem;
   font-weight: 600;
-  color: #333;
-  margin: 10px 0;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.55);
+}
+
+/* ── Title ── */
+.pa-title-row {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.pa-title-wrap {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 10px;
 }
 
-.celebration-emoji {
-  font-size: 2rem;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+.pa-trophy {
+  font-size: 1.6rem;
+  animation: paTrophyRock 1.8s ease-in-out infinite;
+  filter: drop-shadow(0 2px 8px rgba(255, 200, 0, 0.5));
 }
 
-.confetti-dots {
-  font-size: 1.2rem;
-  opacity: 0.7;
-  margin-top: 5px;
+.pa-trophy:last-child { animation-direction: reverse; }
+
+@keyframes paTrophyRock {
+  0%, 100% { transform: rotate(-10deg) scale(1); }
+  50%       { transform: rotate(10deg) scale(1.15); }
+}
+
+.pa-title {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  background: linear-gradient(90deg, #ffd6ff, #c8b8ff, #7af9ff, #ffd6ff);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: paTitleSlide 3s linear infinite;
+}
+
+@keyframes paTitleSlide {
+  0%   { background-position: 0% 0%; }
+  100% { background-position: 250% 0%; }
+}
+
+/* ── Footer: participants ── */
+.pa-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.pa-participants-label {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: rgba(255,255,255,0.6);
+  letter-spacing: 0.3px;
+}
+
+.pa-avatars {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.pa-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 800;
+  color: white;
+  border: 2.5px solid rgba(255,255,255,0.5);
+  margin-left: -10px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+  transition: transform 0.2s, box-shadow 0.2s, z-index 0s;
+  cursor: default;
+  animation: paAvatarPop 0.4s calc(0.5s + var(--idx, 0) * 0.08s) cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.pa-avatar:first-child { margin-left: 0; }
+
+.pa-avatar:hover {
+  transform: translateY(-6px) scale(1.18);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.4), 0 0 0 3px rgba(255,255,255,0.25);
+  z-index: 10;
+}
+
+@keyframes paAvatarPop {
+  from { opacity: 0; transform: scale(0) translateY(10px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* ── Confetti rain ── */
+.pa-confetti-field {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.pa-confetti-piece {
+  position: absolute;
+  top: -12px;
+  left: calc(var(--i, 0) * 7.14% + 1%);
+  width: 7px;
+  height: 14px;
+  border-radius: 2px;
+  background: hsl(calc(var(--i, 0) * 26deg) 80% 68%);
+  animation: paConfettiFall calc(2.2s + var(--i, 0) * 0.18s) calc(var(--i, 0) * 0.15s) ease-in infinite;
+  opacity: 0.85;
+}
+
+/* alternate wider pieces */
+.pa-confetti-piece:nth-child(even) {
+  width: 5px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.pa-confetti-piece:nth-child(3n) {
+  width: 9px;
+  height: 4px;
+  border-radius: 1px;
+}
+
+@keyframes paConfettiFall {
+  0%   { transform: translateY(0)   rotate(0deg)   scaleX(1); opacity: 0.9; }
+  50%  { transform: translateY(55%) rotate(180deg) scaleX(-1); opacity: 0.8; }
+  100% { transform: translateY(115vh) rotate(360deg) scaleX(1); opacity: 0; }
+}
+
+@media (max-width: 480px) {
+  .pa-value  { font-size: 4rem; letter-spacing: -2px; }
+  .pa-title  { font-size: 1.2rem; }
+  .pa-trophy { font-size: 1.2rem; }
 }
 
 /* Stats Footer */

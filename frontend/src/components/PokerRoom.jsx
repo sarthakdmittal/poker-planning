@@ -509,14 +509,14 @@ export default function PokerRoom({ name, onLeaveRoom }) {
   const [issueTitle, setIssueTitle] = useState(null);
   const [acceptanceCriteria, setAcceptanceCriteria] = useState(null);
   const [description, setDescription] = useState(null);
-  const [showAcceptance, setShowAcceptance] = useState(true);
+  const [showAcceptance, setShowAcceptance] = useState(false);
   const [editingAcceptance, setEditingAcceptance] = useState(false);
   const [editAcceptanceValue, setEditAcceptanceValue] = useState("");
   const [editingAcceptanceVisual, setEditingAcceptanceVisual] = useState(false);
   const [editAcceptanceVisualValue, setEditAcceptanceVisualValue] = useState("");
   const [tiptapAcceptanceHtml, setTiptapAcceptanceHtml] = useState("");
   const [showVisual, setShowVisual] = useState(true);
-  const [showDescription, setShowDescription] = useState(true);
+  const [showDescription, setShowDescription] = useState(false);
   const [storyList, setStoryList] = useState([]);
   const [currentStoryIndex, setCurrentStoryIndex] = useState(0);
   const [storyListInput, setStoryListInput] = useState("");
@@ -2914,16 +2914,53 @@ export default function PokerRoom({ name, onLeaveRoom }) {
               <div className="results-section">
                 <h3>Voting Results</h3>
 
-                {stats && (
+                {allVotesSame ? (
+                  <div className="perfect-agreement-outer">
+                  <div className="perfect-agreement-hero">
+                    {/* confetti rain */}
+                    <div className="pa-confetti-field" aria-hidden="true">
+                      {Array.from({length: 14}, (_, i) => (
+                        <span key={i} className="pa-confetti-piece" style={{'--i': i}} />
+                      ))}
+                    </div>
+
+                    <div className="pa-value-wrap">
+                      <div className="pa-value">{Object.values(results.votes)[0]}</div>
+                      <div className="pa-value-label">story points</div>
+                    </div>
+
+                    <div className="pa-title-row">
+                      <div className="pa-title-wrap">
+                        <span className="pa-trophy">🏆</span>
+                        <h4 className="pa-title">Perfect Agreement</h4>
+                        <span className="pa-trophy">🏆</span>
+                      </div>
+                    </div>
+
+                    <div className="pa-footer">
+                      <div className="pa-participants-label">
+                        All {stats?.count} participant{stats?.count !== 1 ? 's' : ''} voted the same
+                      </div>
+                      <div className="pa-avatars">
+                        {Object.entries(results.votes).map(([id], idx) => (
+                          <div
+                            key={id}
+                            className="pa-avatar"
+                            title={results.users[id]}
+                            style={{ backgroundColor: getAvatarColor(results.users[id]), '--idx': idx }}
+                          >
+                            {(results.users[id] || '?')[0].toUpperCase()}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  </div>
+                ) : (
+                  stats && (
                     <div className="stats-wrapper">
                       <div className="stats-header">
                         <span className="stats-title">📊 Vote Analysis</span>
-                        {allVotesSame && (
-                            <span className="consensus-badge">
-                      <span className="consensus-icon">🎯</span>
-                      Consensus Reached!
-                    </span>
-                        )}
                       </div>
                       <div className="stats-grid">
                         <div className="stat-card average">
@@ -2965,7 +3002,6 @@ export default function PokerRoom({ name, onLeaveRoom }) {
                         </div>
                       </div>
 
-                      {/* Range Visualization */}
                       {stats.min !== stats.max && (
                           <div className="vote-range">
                             <div className="range-label">Vote Range</div>
@@ -2985,28 +3021,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
                           </div>
                       )}
                     </div>
-                )}
-
-                {allVotesSame && (
-                    <div className="celebration">
-                      <div className="party-poppers">
-                        <span>🎉</span>
-                        <span>🎊</span>
-                        <span>🎉</span>
-                        <span>✨</span>
-                        <span>🎉</span>
-                      </div>
-                      <p className="celebration-text">
-                        <span className="celebration-emoji">🏆</span>
-                        Perfect Agreement!
-                        <span className="celebration-emoji">🏆</span>
-                      </p>
-                      <div className="confetti-dots">
-                        <span>⚡</span>
-                        <span>⭐</span>
-                        <span>⚡</span>
-                      </div>
-                    </div>
+                  )
                 )}
 
                 <div className="votes-grid">
