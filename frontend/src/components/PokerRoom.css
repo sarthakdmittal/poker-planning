@@ -1603,309 +1603,173 @@
   overflow: hidden;
 }
 
-.admin-controls::before {
-  content: '';
-  position: absolute;
-  top: -50%;
-  right: -50%;
-  width: 200%;
-  height: 200%;
-  background: radial-gradient(circle, rgba(255,255,255,0.3) 0%, transparent 70%);
-  animation: adminRotate 20s linear infinite;
-}
-
-@keyframes adminRotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
 
 /* Reset Voting Button - Enhanced */
-.btn-reset {
+/* ── Unified action bar ── */
+/* ── Action bar (post-reveal admin controls) ── */
+.action-bar {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 16px;
+  background: white;
+  border: 1px solid #e9ecef;
+  border-radius: 18px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+
+.action-bar__finalize {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  flex: 1;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+/* Merged point-input + Finalize pill */
+.action-bar__point-wrap {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
+  min-width: 200px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid #667eea;
+  background: white;
+  transition: box-shadow 0.2s;
+}
+
+.action-bar__point-wrap:focus-within {
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.18);
+}
+
+.action-bar__point-wrap .point-input {
+  width: 76px;
+  flex-shrink: 0;
+  border: none;
+  border-right: 2px solid #667eea;
+  border-radius: 0;
+  padding: 0 10px;
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
+  color: #3730a3;
+  background: #f5f6ff;
+  outline: none;
+  transition: background 0.15s;
+}
+
+.action-bar__point-wrap .point-input:focus {
+  background: #eef0ff;
+}
+
+/* ── Shared button base ── */
+.action-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  background: linear-gradient(135deg, #dc3545, #c82333);
-  color: white;
-  border: none;
-  padding: 14px 28px;
-  border-radius: 50px;
-  font-weight: 600;
-  font-size: 15px;
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  margin-bottom: 20px;
-  width: 100%;
-  position: relative;
-  overflow: hidden;
-  box-shadow: 0 8px 20px rgba(220, 53, 69, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  letter-spacing: 0.5px;
-}
-
-.btn-reset::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-  transition: left 0.5s ease;
-}
-
-.btn-reset:hover {
-  transform: translateY(-3px) scale(1.02);
-  box-shadow: 0 15px 30px rgba(220, 53, 69, 0.5);
-  background: linear-gradient(135deg, #c82333, #bd2130);
-}
-
-.btn-reset:hover::before {
-  left: 100%;
-}
-
-.btn-reset:active {
-  transform: translateY(-1px) scale(0.98);
-}
-
-.btn-reset svg {
-  font-size: 18px;
-  animation: resetSpin 2s infinite linear;
-}
-
-@keyframes resetSpin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.btn-reset:hover svg {
-  animation: resetSpin 1s infinite linear;
-}
-
-/* Finalize Controls Container */
-.finalize-controls {
-  display: flex;
-  gap: 15px;
-  flex-wrap: wrap;
-  align-items: center;
-  margin-bottom: 20px;
-  background: white;
-  padding: 20px;
-  border-radius: 20px;
-  box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.05);
-  position: relative;
-  z-index: 2;
-}
-
-/* Jira Input - Enhanced */
-.jira-input {
-  flex: 2;
-  min-width: 200px;
-  padding: 14px 20px;
-  border: 2px solid #e9ecef;
-  border-radius: 50px;
+  gap: 8px;
+  padding: 11px 20px;
+  border-radius: 12px;
   font-size: 14px;
-  transition: all 0.3s ease;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.12s, box-shadow 0.15s, border-color 0.15s;
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+  border: none;
+}
+
+.action-btn svg {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.action-btn:active {
+  transform: scale(0.96);
+}
+
+/* Reset Voting — red tinted */
+.action-btn--reset {
+  background: #fff1f2;
+  color: #be123c;
+  border-color: #fda4af;
+}
+
+.action-btn--reset:hover {
+  background: #ffe4e8;
+  border-color: #fb7185;
+  box-shadow: 0 4px 12px rgba(190, 18, 60, 0.15);
+  transform: translateY(-1px);
+}
+
+/* Finalize — fills the right half of the point-wrap pill */
+.action-btn--finalize {
+  flex: 1;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 0;
+  border: none;
+  padding: 0 20px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  box-shadow: none;
+}
+
+.action-btn--finalize:hover:not(:disabled) {
+  background: linear-gradient(135deg, #5a6fd6 0%, #6a3f90 100%);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.15);
+}
+
+.action-btn--finalize:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Reset List — neutral ghost */
+.action-btn--reset-list {
+  background: #f8f9fa;
+  color: #6c757d;
+  border-color: #dee2e6;
+}
+
+.action-btn--reset-list:hover {
+  background: #f1f3f5;
+  border-color: #adb5bd;
+  color: #343a40;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+}
+
+.btn-reset { display: none; }
+
+/* Jira Key input inside action bar */
+.jira-input {
+  flex: 1;
+  min-width: 130px;
+  padding: 11px 14px;
+  border: 2px solid #dee2e6;
+  border-radius: 12px;
+  font-size: 14px;
   background: white;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03);
+  transition: border-color 0.2s, box-shadow 0.2s;
+  outline: none;
+  color: #495057;
 }
 
 .jira-input:focus {
-  outline: none;
   border-color: #667eea;
-  box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.15);
-  transform: translateY(-2px);
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
 }
 
-.jira-input:hover {
-  border-color: #adb5bd;
-  transform: translateY(-2px);
-  box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
-}
-
-/* Point Input Group */
-.point-input-group {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  flex: 1;
-  position: relative;
-}
-
-.point-input {
-  width: 100px;
-  padding: 14px 10px;
-  border: 2px solid #e9ecef;
-  border-radius: 50px;
-  font-size: 16px;
-  text-align: center;
-  font-weight: 600;
-  color: #495057;
-  background: white;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03);
-}
-
-.point-input:focus {
-  outline: none;
-  border-color: #fd7e14;
-  box-shadow: 0 0 0 4px rgba(253, 126, 20, 0.15);
-  transform: translateY(-2px);
-}
-
-.point-input:hover {
-  border-color: #fd7e14;
-  transform: translateY(-2px);
-  box-shadow: 0 6px 15px rgba(253, 126, 20, 0.15);
-}
-
-/* Finalize Button - Enhanced */
-.btn-finalize {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  background: linear-gradient(135deg, #ffc107, #fd7e14);
-  color: white;
-  border: none;
-  padding: 14px 28px;
-  border-radius: 50px;
-  font-weight: 600;
-  font-size: 15px;
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  position: relative;
-  overflow: hidden;
-  box-shadow: 0 8px 20px rgba(255, 193, 7, 0.3);
-  flex: 1;
-  letter-spacing: 0.5px;
-}
-
-.btn-finalize::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-  transition: left 0.5s ease;
-}
-
-.btn-finalize:hover {
-  transform: translateY(-3px) scale(1.02);
-  box-shadow: 0 15px 30px rgba(255, 193, 7, 0.5);
-  background: linear-gradient(135deg, #fd7e14, #ffc107);
-}
-
-.btn-finalize:hover::before {
-  left: 100%;
-}
-
-.btn-finalize:active {
-  transform: translateY(-1px) scale(0.98);
-}
-
-.btn-finalize svg {
-  font-size: 18px;
-  animation: starTwinkle 2s infinite;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
-}
-
-@keyframes starTwinkle {
-  0%, 100% {
-    transform: scale(1) rotate(0deg);
-    opacity: 1;
-  }
-  50% {
-    transform: scale(1.2) rotate(180deg);
-    opacity: 0.8;
-  }
-}
-
-.btn-finalize:hover svg {
-  animation: starTwinkle 1s infinite;
-}
-
-/* Reset List Button - Enhanced */
-.btn-reset-list {
-  background: linear-gradient(135deg, #6c757d, #5a6268);
-  border: none;
-  color: white;
-  padding: 14px 28px;
-  border-radius: 50px;
-  font-weight: 600;
-  font-size: 15px;
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  width: 100%;
-  position: relative;
-  overflow: hidden;
-  box-shadow: 0 8px 20px rgba(108, 117, 125, 0.3);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  letter-spacing: 0.5px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.btn-reset-list::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-  transition: left 0.5s ease;
-}
-
-.btn-reset-list:hover {
-  transform: translateY(-3px) scale(1.02);
-  box-shadow: 0 15px 30px rgba(108, 117, 125, 0.5);
-  background: linear-gradient(135deg, #5a6268, #6c757d);
-}
-
-.btn-reset-list:hover::before {
-  left: 100%;
-}
-
-.btn-reset-list:active {
-  transform: translateY(-1px) scale(0.98);
-}
-
-.btn-reset-list svg {
-  font-size: 16px;
-  animation: resetPulse 2s infinite;
-}
-
-@keyframes resetPulse {
-  0%, 100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.2);
-  }
-}
-
-/* Success Animation for Finalize */
-@keyframes finalizeSuccess {
-  0% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.1);
-    box-shadow: 0 0 30px rgba(40, 167, 69, 0.8);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
-.btn-finalize.success {
-  animation: finalizeSuccess 0.5s ease;
-  background: linear-gradient(135deg, #28a745, #20c997);
+.jira-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* Loading State for Buttons */

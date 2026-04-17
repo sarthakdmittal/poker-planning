@@ -704,25 +704,7 @@ export default function PokerRoom({ name, onLeaveRoom }) {
         }
       }
 
-      // Load saved users from localStorage
-      const savedUsers = localStorage.getItem(`users_${roomId}`);
-      if (savedUsers) {
-        const parsedUsers = JSON.parse(savedUsers);
-        // Check if users data has timestamp (if you saved it with timestamp)
-        if (parsedUsers.savedAt) {
-          const savedTime = new Date(parsedUsers.savedAt).getTime();
-          const currentTime = new Date().getTime();
-          const hoursDiff = (currentTime - savedTime) / (1000 * 60 * 60);
-
-          if (hoursDiff <= 24) {
-            setUsers(parsedUsers);
-          } else {
-            localStorage.removeItem(`users_${roomId}`);
-          }
-        } else {
-          setUsers(parsedUsers);
-        }
-      }
+      // Do not restore users from localStorage — server sends the authoritative list on join
 
       // Load saved observers from localStorage
       const savedObservers = localStorage.getItem(`observers_${roomId}`);
@@ -998,14 +980,6 @@ export default function PokerRoom({ name, onLeaveRoom }) {
       const currentUserStillInRoom = Object.values(data).includes(name);
 
       setUsers(data);
-      // Add this to save users to localStorage
-      if (roomId) {
-        const usersWithTimestamp = {
-          ...data,
-          savedAt: new Date().toISOString()
-        };
-        localStorage.setItem(`users_${roomId}`, JSON.stringify(usersWithTimestamp));
-      }
       // If current user is no longer in the room, they were kicked or disconnected
       if (!currentUserStillInRoom && !isReconnecting) {
         console.log("Current user no longer in room, redirecting to home");
@@ -3077,78 +3051,79 @@ export default function PokerRoom({ name, onLeaveRoom }) {
                 {/* Admin Controls */}
                 {isAdmin && (
                     <div className="admin-controls">
-                      <button
-                          className="btn-reset"
-                          onClick={handleReset}
-                      >
-                        <FaUndo /> Reset Voting
-                      </button>
+                      <div className="action-bar">
 
-                      <div className="finalize-controls">
-                        {storyList.length === 0 && (
+                        {/* Left: Reset Voting */}
+                        <button className="action-btn action-btn--reset" onClick={handleReset}>
+                          <FaUndo />
+                          <span>Reset Voting</span>
+                        </button>
+
+                        {/* Centre: point input + Finalize */}
+                        <div className="action-bar__finalize">
+                          {storyList.length === 0 && (
+                              <input
+                                  type="text"
+                                  placeholder="Jira Key"
+                                  value={jiraKey}
+                                  onChange={e => setJiraKey(e.target.value)}
+                                  className="jira-input"
+                                  disabled={!jiraConnected}
+                              />
+                          )}
+                          <div className="action-bar__point-wrap">
                             <input
-                                type="text"
-                                placeholder="Jira Key"
-                                value={jiraKey}
-                                onChange={e => setJiraKey(e.target.value)}
-                                className="jira-input"
-                                disabled={!jiraConnected}
+                                type={typeof cards[0] === 'number' ? 'number' : 'text'}
+                                value={customPoint}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  setCustomPoint(typeof cards[0] === 'number' ? Number(val) : val);
+                                }}
+                                min={0}
+                                className="point-input"
+                                placeholder="Points"
                             />
-                        )}
-                        <div className="point-input-group">
-                          <input
-                              type={typeof cards[0] === 'number' ? 'number' : 'text'}
-                              value={customPoint}
-                              onChange={e => {
-                                const val = e.target.value;
-                                if (typeof cards[0] === 'number') {
-                                  setCustomPoint(Number(val));
-                                } else {
-                                  setCustomPoint(val);
-                                }
-                              }}
-                              min={0}
-                              className="point-input"
-                              placeholder="Final value"
-                          />
-                          <button
-                              className="btn-finalize"
-                              onClick={handleFinalize}
-                              disabled={!jiraConnected && storyList.length === 0}
-                          >
-                            <FaStar /> Finalize {customPoint}
-                          </button>
+                            <button
+                                className="action-btn action-btn--finalize"
+                                onClick={handleFinalize}
+                                disabled={!jiraConnected && storyList.length === 0}
+                            >
+                              <FaStar />
+                              <span>Finalize {customPoint !== '' && customPoint !== 0 ? customPoint : ''}</span>
+                            </button>
+                          </div>
                         </div>
+
+                        {/* Right: Reset List */}
+                        {storyList.length > 0 && (
+                            <button
+                                className="action-btn action-btn--reset-list"
+                                onClick={() => {
+                                  setStoryList([]);
+                                  setStoryListInput("");
+                                  setCurrentStoryIndex(0);
+                                  setJiraKey("");
+                                  setRevealed(false);
+                                  setResults(null);
+                                  setFinalPoint(null);
+                                  setIssueTitle(null);
+                                  setAcceptanceCriteria(null);
+                                  setDescription(null);
+                                  setObservingTarget(null);
+                                  setEditingAcceptance(false);
+                                  setEditingAcceptanceVisual(false);
+                                  setEditingDescription(false);
+                                  setEditingDescriptionVisual(false);
+                                  socket.emit("reset", { roomId });
+                                  localStorage.removeItem(`storyData_${roomId}`);
+                                }}
+                            >
+                              <FaUndo />
+                              <span>Reset List</span>
+                            </button>
+                        )}
+
                       </div>
-
-                      {storyList.length > 0 && (
-                          <button
-                              className="btn-reset-list"
-                              onClick={() => {
-                                setStoryList([]);
-                                setStoryListInput("");
-                                setCurrentStoryIndex(0);
-                                setJiraKey("");
-                                setRevealed(false);
-                                setResults(null);
-                                setFinalPoint(null);
-                                setIssueTitle(null);
-                                setAcceptanceCriteria(null);
-                                setDescription(null);
-                                setObservingTarget(null);
-                                setEditingAcceptance(false);
-                                setEditingAcceptanceVisual(false);
-                                setEditingDescription(false);
-                                setEditingDescriptionVisual(false);
-                                socket.emit("reset", { roomId });
-
-                                // Clear localStorage for this room
-                                localStorage.removeItem(`storyData_${roomId}`);
-                              }}
-                          >
-                            Reset List
-                          </button>
-                      )}
                     </div>
                 )}
               </div>
