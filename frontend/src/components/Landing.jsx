@@ -1,37 +1,42 @@
-// components/Landing.jsx
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { socket } from "../socket";
+import { MdGroupAdd, MdMeetingRoom } from 'react-icons/md';
+import { GiPokerHand } from 'react-icons/gi';
 
 export default function Landing() {
   const navigate = useNavigate();
 
-  const handleCreateRoom = () => {
-    navigate('/create-room');
-  };
-
-  const handleJoinRoom = () => {
-    navigate('/join-room');
-  };
-
   return (
     <div className="landing-page">
+      <div className="landing-orb landing-orb-1" />
+      <div className="landing-orb landing-orb-2" />
+      <div className="landing-orb landing-orb-3" />
+
       <div className="landing-card">
+        <div className="landing-logo">
+          <GiPokerHand className="landing-logo-icon" />
+        </div>
         <h1 className="landing-title">Planning Poker</h1>
-        <p className="landing-subtitle">Choose an option to continue</p>
+        <p className="landing-subtitle">Estimate smarter, together</p>
 
         <div className="landing-options">
-          <div className="landing-option create-option" onClick={handleCreateRoom}>
-            <div className="option-icon">➕</div>
+          <button className="landing-option create-option" onClick={() => navigate('/create-room')}>
+            <div className="option-icon-wrap create-icon-wrap">
+              <MdGroupAdd className="option-icon-svg" />
+            </div>
             <h2>Create a Room</h2>
             <p>Start a new planning poker session</p>
-          </div>
+            <span className="option-cta">Get started &rarr;</span>
+          </button>
 
-          <div className="landing-option join-option" onClick={handleJoinRoom}>
-            <div className="option-icon">🔗</div>
+          <button className="landing-option join-option" onClick={() => navigate('/join-room')}>
+            <div className="option-icon-wrap join-icon-wrap">
+              <MdMeetingRoom className="option-icon-svg" />
+            </div>
             <h2>Join a Room</h2>
-            <p>Join an existing session with room ID</p>
-          </div>
+            <p>Join an existing session with a room ID</p>
+            <span className="option-cta">Join now &rarr;</span>
+          </button>
         </div>
       </div>
     </div>
