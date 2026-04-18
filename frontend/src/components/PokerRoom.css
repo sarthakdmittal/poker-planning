@@ -1274,40 +1274,186 @@
   z-index: 5;
 }
 
-/* Stats Styling */
 /* ════════════════════════════════════
-   Voting Results Panel
+   Voting Results Hero
    ════════════════════════════════════ */
 
-.vr-panel {
-  background: #fff;
-  border: 1px solid #e9ecef;
-  border-radius: 20px;
-  padding: 20px;
-  margin-bottom: 16px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.06);
-  animation: vrFadeIn 0.4s cubic-bezier(0.34,1.2,0.64,1) both;
-}
-
-@keyframes vrFadeIn {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-.vr-panel__heading {
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: #1e293b;
-  margin-bottom: 16px;
-  letter-spacing: -0.2px;
-}
-
-/* ── 4 stat chips ── */
-.vr-stats {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
+/* Spinning border wrapper — mirrors perfect-agreement-outer */
+.vr-hero-outer {
+  position: relative;
+  border-radius: 26px;
+  padding: 3px;
   margin-bottom: 20px;
+  overflow: hidden;
+  animation: vrHeroEntrance 0.55s cubic-bezier(0.34, 1.4, 0.64, 1) both;
+  box-shadow: 0 16px 48px rgba(17, 24, 70, 0.45),
+              0 0 60px rgba(79, 70, 229, 0.15);
+}
+
+@keyframes vrHeroEntrance {
+  from { opacity: 0; transform: scale(0.92) translateY(18px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.vr-hero-outer::before {
+  content: '';
+  position: absolute;
+  inset: -50%;
+  background: conic-gradient(#4ade80, #60a5fa, #818cf8, #f472b6, #fb923c, #facc15, #4ade80);
+  animation: vrHeroBorderSpin 4s linear infinite;
+  z-index: 0;
+}
+
+@keyframes vrHeroBorderSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* Dark hero card — mirrors perfect-agreement-hero */
+.vr-hero {
+  position: relative;
+  background: linear-gradient(145deg, #0f172a 0%, #1e1b4b 45%, #0c2340 100%);
+  border-radius: 24px;
+  padding: 28px 24px 22px;
+  text-align: center;
+  color: white;
+  overflow: hidden;
+  z-index: 1;
+}
+
+/* Floating orb layer */
+.vr-hero__orbs {
+  position: absolute;
+  inset: 0;
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 12% 20%, rgba(99, 102, 241, 0.35) 0%, transparent 42%),
+    radial-gradient(circle at 88% 80%, rgba(34, 211, 238, 0.20) 0%, transparent 42%),
+    radial-gradient(circle at 50% 55%, rgba(244, 114, 182, 0.12) 0%, transparent 55%);
+  animation: vrHeroOrbFloat 6s ease-in-out infinite alternate;
+  pointer-events: none;
+  z-index: 0;
+}
+
+@keyframes vrHeroOrbFloat {
+  from { opacity: 0.75; transform: scale(1) translateX(0); }
+  to   { opacity: 1;    transform: scale(1.06) translateX(8px); }
+}
+
+/* Floating particles */
+.vr-hero__particles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.vr-hero__particle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: hsl(calc(var(--pi, 0) * 30deg) 80% 75%);
+  left: calc(var(--pi, 0) * 8.5% + 2%);
+  top: -8px;
+  animation: vrParticleDrift calc(3s + var(--pi, 0) * 0.3s) calc(var(--pi, 0) * 0.25s) ease-in infinite;
+  opacity: 0.7;
+}
+
+@keyframes vrParticleDrift {
+  0%   { transform: translateY(0)    rotate(0deg)   scale(1);   opacity: 0.8; }
+  60%  { transform: translateY(60px) rotate(180deg) scale(0.8); opacity: 0.5; }
+  100% { transform: translateY(130px) rotate(360deg) scale(0.4); opacity: 0; }
+}
+
+/* Title row */
+.vr-hero__title-row {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.vr-hero__icon {
+  font-size: 1.4rem;
+  animation: vrHeroIconRock 2s ease-in-out infinite;
+  filter: drop-shadow(0 2px 6px rgba(255,220,100,0.45));
+}
+
+.vr-hero__icon:last-child { animation-direction: reverse; }
+
+@keyframes vrHeroIconRock {
+  0%, 100% { transform: rotate(-8deg) scale(1); }
+  50%       { transform: rotate(8deg) scale(1.12); }
+}
+
+.vr-hero__title {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: rgba(255,255,255,0.85);
+  text-transform: uppercase;
+}
+
+/* Big average display */
+.vr-hero__avg-wrap {
+  position: relative;
+  z-index: 1;
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.vr-hero__avg-val {
+  font-size: 4.5rem;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -3px;
+  background: linear-gradient(135deg, #fff 0%, #bfdbfe 40%, #a5f3fc 80%, #fff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  background-size: 200% 200%;
+  animation: vrAvgShine 2.8s ease-in-out infinite,
+             vrAvgPop 0.5s 0.15s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  filter: drop-shadow(0 0 14px rgba(99, 102, 241, 0.6));
+  display: inline-block;
+}
+
+@keyframes vrAvgShine {
+  0%, 100% { background-position: 0% 50%; }
+  50%       { background-position: 100% 50%; }
+}
+
+@keyframes vrAvgPop {
+  from { opacity: 0; transform: scale(0.55); filter: blur(6px); }
+  to   { opacity: 1; transform: scale(1);    filter: none; }
+}
+
+.vr-hero__avg-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: rgba(255,255,255,0.45);
+}
+
+/* ── 5 stat chips inside hero ── */
+.vr-stats {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin-bottom: 0;
 }
 
 .vr-stat {
@@ -1315,38 +1461,137 @@
   flex-direction: column;
   align-items: center;
   gap: 3px;
-  padding: 14px 8px 10px;
+  padding: 12px 6px 9px;
   border-radius: 14px;
-  transition: transform 0.15s;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.2s ease;
+  animation: vrStatIn 0.45s calc(var(--stat-idx, 0) * 0.08s)
+    cubic-bezier(0.34, 1.3, 0.64, 1) both;
 }
 
-.vr-stat:hover { transform: translateY(-2px); }
+@keyframes vrStatIn {
+  from { opacity: 0; transform: translateY(22px) scale(0.82); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
 
-.vr-stat--avg    { background: linear-gradient(135deg, #eef2ff, #e0e7ff); }
-.vr-stat--low    { background: linear-gradient(135deg, #f0fdf4, #dcfce7); }
-.vr-stat--high   { background: linear-gradient(135deg, #fff7ed, #ffedd5); }
-.vr-stat--spread { background: linear-gradient(135deg, #fdf4ff, #f3e8ff); }
+/* Shimmer sweep on reveal */
+.vr-stat::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg,
+    transparent 20%,
+    rgba(255,255,255,0.6) 50%,
+    transparent 80%);
+  transform: translateX(-100%);
+  animation: vrStatShimmer 0.75s calc(var(--stat-idx, 0) * 0.08s + 0.35s) ease forwards;
+  pointer-events: none;
+}
+
+@keyframes vrStatShimmer {
+  to { transform: translateX(130%); }
+}
+
+.vr-stat:hover {
+  transform: translateY(-4px) scale(1.06);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.18);
+}
+
+.vr-stat--low {
+  background: linear-gradient(135deg, rgba(240,253,244,0.18), rgba(220,252,231,0.28));
+  border: 1px solid rgba(74, 222, 128, 0.3);
+  animation: vrStatIn 0.45s 0s cubic-bezier(0.34, 1.3, 0.64, 1) both,
+             vrStatGlowLow 3s 1s ease-in-out infinite;
+}
+
+.vr-stat--median {
+  background: linear-gradient(135deg, rgba(255,251,235,0.18), rgba(253,230,138,0.22));
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  animation: vrStatIn 0.45s 0.08s cubic-bezier(0.34, 1.3, 0.64, 1) both,
+             vrStatGlowMedian 3s 1.08s ease-in-out infinite;
+}
+
+.vr-stat--avg {
+  background: linear-gradient(135deg, rgba(238,242,255,0.2), rgba(224,231,255,0.3));
+  border: 1px solid rgba(129, 140, 248, 0.4);
+  animation: vrStatIn 0.45s 0.16s cubic-bezier(0.34, 1.3, 0.64, 1) both,
+             vrStatGlowAvg 3s 1.16s ease-in-out infinite;
+}
+
+.vr-stat--high {
+  background: linear-gradient(135deg, rgba(255,247,237,0.18), rgba(255,237,213,0.28));
+  border: 1px solid rgba(251, 146, 60, 0.3);
+  animation: vrStatIn 0.45s 0.24s cubic-bezier(0.34, 1.3, 0.64, 1) both,
+             vrStatGlowHigh 3s 1.24s ease-in-out infinite;
+}
+
+.vr-stat--spread {
+  background: linear-gradient(135deg, rgba(253,244,255,0.18), rgba(243,232,255,0.28));
+  border: 1px solid rgba(192, 132, 252, 0.3);
+  animation: vrStatIn 0.45s 0.32s cubic-bezier(0.34, 1.3, 0.64, 1) both;
+}
+
+@keyframes vrStatGlowLow {
+  0%, 100% { box-shadow: none; }
+  50%       { box-shadow: 0 0 14px 3px rgba(74, 222, 128, 0.3); }
+}
+
+@keyframes vrStatGlowMedian {
+  0%, 100% { box-shadow: none; }
+  50%       { box-shadow: 0 0 14px 3px rgba(251, 191, 36, 0.3); }
+}
+
+@keyframes vrStatGlowAvg {
+  0%, 100% { box-shadow: none; }
+  50%       { box-shadow: 0 0 14px 3px rgba(129, 140, 248, 0.35); }
+}
+
+@keyframes vrStatGlowHigh {
+  0%, 100% { box-shadow: none; }
+  50%       { box-shadow: 0 0 14px 3px rgba(251, 146, 60, 0.3); }
+}
 
 .vr-stat__val {
-  font-size: 1.65rem;
+  font-size: 1.4rem;
   font-weight: 900;
   line-height: 1;
+  animation: vrStatValPop 0.5s calc(var(--stat-idx, 0) * 0.08s + 0.15s)
+    cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
-.vr-stat--avg    .vr-stat__val { color: #4f46e5; }
-.vr-stat--low    .vr-stat__val { color: #16a34a; }
-.vr-stat--high   .vr-stat__val { color: #ea580c; }
-.vr-stat--spread .vr-stat__val { color: #9333ea; }
+@keyframes vrStatValPop {
+  from { opacity: 0; transform: scale(0.4); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.vr-stat--low    .vr-stat__val { color: #4ade80; }
+.vr-stat--median .vr-stat__val { color: #fbbf24; }
+.vr-stat--avg    .vr-stat__val { color: #818cf8; }
+.vr-stat--high   .vr-stat__val { color: #fb923c; }
+.vr-stat--spread .vr-stat__val { color: #c084fc; }
 
 .vr-stat__label {
-  font-size: 0.68rem;
+  font-size: 0.62rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.6px;
-  color: #94a3b8;
+  color: rgba(255,255,255,0.45);
+  animation: vrStatLabelFade 0.4s calc(var(--stat-idx, 0) * 0.08s + 0.3s) ease both;
 }
 
-@media (max-width: 500px) {
+@keyframes vrStatLabelFade {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 600px) {
+  .vr-stats { grid-template-columns: repeat(3, 1fr); }
+  .vr-hero__avg-val { font-size: 3.2rem; }
+}
+
+@media (max-width: 400px) {
   .vr-stats { grid-template-columns: repeat(2, 1fr); }
 }
 

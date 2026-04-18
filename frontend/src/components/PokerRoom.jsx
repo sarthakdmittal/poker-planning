@@ -486,9 +486,15 @@ const calculateStats = (votes) => {
   const avg = sum / numericValues.length;
   const min = Math.min(...numericValues);
   const max = Math.max(...numericValues);
+  const sorted = [...numericValues].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  const median = sorted.length % 2 === 0
+    ? ((sorted[mid - 1] + sorted[mid]) / 2).toFixed(1)
+    : sorted[mid];
 
   return {
     avg: avg.toFixed(1),
+    median,
     min,
     max,
     count: numericValues.length,
@@ -2958,29 +2964,53 @@ export default function PokerRoom({ name, onLeaveRoom }) {
                 ) : (
                   stats && (() => {
                     return (
-                      <div className="vr-panel">
-                        <div className="vr-panel__heading">Voting Results</div>
+                      <div className="vr-hero-outer">
+                        <div className="vr-hero">
+                          {/* Floating orbs */}
+                          <div className="vr-hero__orbs" />
 
-                        {/* Stat chips */}
-                        <div className="vr-stats">
-                          <div className="vr-stat vr-stat--low">
-                            <span className="vr-stat__val">{stats.min}</span>
-                            <span className="vr-stat__label">Low</span>
+                          {/* Particle field */}
+                          <div className="vr-hero__particles">
+                            {Array.from({length: 12}).map((_, i) => (
+                              <div key={i} className="vr-hero__particle" style={{'--pi': i}} />
+                            ))}
                           </div>
-                          <div className="vr-stat vr-stat--avg">
-                            <span className="vr-stat__val">{stats.avg}</span>
-                            <span className="vr-stat__label">Average</span>
+
+                          <div className="vr-hero__title-row">
+                            <span className="vr-hero__icon">📊</span>
+                            <h4 className="vr-hero__title">Voting Results</h4>
+                            <span className="vr-hero__icon">🎯</span>
                           </div>
-                          <div className="vr-stat vr-stat--high">
-                            <span className="vr-stat__val">{stats.max}</span>
-                            <span className="vr-stat__label">High</span>
+
+                          <div className="vr-hero__avg-wrap">
+                            <span className="vr-hero__avg-val">{stats.avg}</span>
+                            <span className="vr-hero__avg-label">average</span>
                           </div>
-                          <div className="vr-stat vr-stat--spread">
-                            <span className="vr-stat__val">{stats.max - stats.min}</span>
-                            <span className="vr-stat__label">Spread</span>
+
+                          {/* Stat chips */}
+                          <div className="vr-stats">
+                            <div className="vr-stat vr-stat--low" style={{'--stat-idx': 0}}>
+                              <span className="vr-stat__val">{stats.min}</span>
+                              <span className="vr-stat__label">Min</span>
+                            </div>
+                            <div className="vr-stat vr-stat--median" style={{'--stat-idx': 1}}>
+                              <span className="vr-stat__val">{stats.median}</span>
+                              <span className="vr-stat__label">Median</span>
+                            </div>
+                            <div className="vr-stat vr-stat--avg" style={{'--stat-idx': 2}}>
+                              <span className="vr-stat__val">{stats.avg}</span>
+                              <span className="vr-stat__label">Average</span>
+                            </div>
+                            <div className="vr-stat vr-stat--high" style={{'--stat-idx': 3}}>
+                              <span className="vr-stat__val">{stats.max}</span>
+                              <span className="vr-stat__label">Max</span>
+                            </div>
+                            <div className="vr-stat vr-stat--spread" style={{'--stat-idx': 4}}>
+                              <span className="vr-stat__val">{stats.max - stats.min}</span>
+                              <span className="vr-stat__label">Spread</span>
+                            </div>
                           </div>
                         </div>
-
                       </div>
                     );
                   })()
